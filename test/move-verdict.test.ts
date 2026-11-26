@@ -3,6 +3,7 @@
 // started for. No test runs the real `claude`: the runner is faked.
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import type { DescriptionRead } from "../scripts/hooks/description.ts";
 import {
@@ -118,6 +119,15 @@ describe("the child guard", () => {
     assert.equal(isVerdictChild(childEnv({})), true);
     assert.equal(isVerdictChild({}), false);
     assert.equal(isVerdictChild({ [CHILD_ENV]: "0" }), false);
+  });
+
+  it("makes the move hook return at once in the model's process", () => {
+    const run = (env: NodeJS.ProcessEnv) =>
+      spawnSync(process.execPath, ["scripts/hooks/report-move.ts"], { input: "not json", encoding: "utf8", env });
+    const env = { ...process.env };
+    delete env[CHILD_ENV];
+    assert.match(run(env).stderr, /^report-move: /);
+    assert.equal(run(childEnv(env)).stderr, "");
   });
 });
 
