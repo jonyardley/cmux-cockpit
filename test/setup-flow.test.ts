@@ -103,15 +103,15 @@ describe("setup", () => {
 
   it("falls back to the example table with no workspaces or no cmux list", async () => {
     const w = where();
-    const f = fakeEnv(w, { "cmux --version": ok("cmux 0.64.25"), "cmux --json list-workspaces": failed() });
+    const f = fakeEnv(w, { "cmux --version": ok("cmux nightly"), "cmux --json list-workspaces": failed() });
     await setup(f.env, ["--no-extras"]);
     const p = pathsFor(w.home, w.repo, undefined);
     assert.equal(readFileSync(p.projects, "utf8"), readFileSync(p.projectsExample, "utf8"));
     assert.ok(f.out.some((l) => l.includes("copied the example")));
-    assert.ok(f.out.some((l) => l.includes("0.64.25 is older than the tested 0.65.2")));
+    assert.ok(f.out.some((l) => l.includes("! cmux: could not read the version")));
   });
 
-  it("stops before touching anything on old Node, no cmux, the wrong folder or no node_modules", async () => {
+  it("stops before touching anything on old Node, no or old cmux, the wrong folder or no node_modules", async () => {
     const w = where();
     const p = pathsFor(w.home, w.repo, undefined);
     const stops = async (env: ReturnType<typeof fakeEnv>, why: RegExp) => {
@@ -121,6 +121,10 @@ describe("setup", () => {
     };
     await stops(fakeEnv(w, {}, { node: "22.1.0" }), /Node: 22\.1\.0 is older than 24\.2\.0/);
     await stops(fakeEnv(w, { "cmux --version": notFound }), /cmux: not found on PATH/);
+    await stops(
+      fakeEnv(w, { "cmux --version": ok("cmux 0.64.25") }),
+      /cmux: 0\.64\.25 is too old, the sidebars need 0\.65\.2 or later\. Fix: update cmux\./,
+    );
     await stops(fakeEnv({ home: w.home, repo: join(w.home, "elsewhere") }), /cmux reads sidebars only from/);
     rmSync(p.nodeModules, { recursive: true });
     await stops(fakeEnv(w), /run npm ci first/);
@@ -311,8 +315,9 @@ describe("doctor", () => {
       "Node for the helper",
     ]);
     assert.ok(checks.every((c) => c.ok || c.fix !== ""));
-    // Only the build is required among these; an old cmux is a warning.
     assert.equal(exitCode(checks), 1);
+    const required = checks.filter((c) => !c.ok && c.required).map((c) => c.label);
+    assert.deepEqual(required, ["cmux", "Build"]);
     assert.ok(report(checks).some((l) => l.startsWith("    fix: npm run build")));
   });
 

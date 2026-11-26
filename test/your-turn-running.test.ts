@@ -103,7 +103,7 @@ describe("a turn that asks Jon something while its chat's work runs", () => {
     selected("quiet", stopped("quiet"));
     assert.deepEqual(head(), RUNNING);
     selected("quiet", nudged("quiet"));
-    assert.notDeepEqual(head(), RUNNING);
+    assert.deepEqual(head(), { ...YOUR_TURN, status: "Your turn <1m" });
     assert.equal(model.cur().a?.status, "needs_input");
   });
 
