@@ -39,10 +39,11 @@ README.md has the layout and commands.
   tests, so it stays even with no TypeScript caller.
 - `src/agents/*.ts` other than `index.ts` and `theme.ts`: data and state.
   Reads `data`, returns plain values, no views. This is what the tests
-  cover. `model.ts` holds the selected workspace, and the section
-  modules build on it, never the other way round. `lists.ts` (caps and
-  "+N more") and `menus.ts` (right-click menus) serve every section. A
-  new module joins the coverage list in `package.json`.
+  cover. `model.ts` holds the selected workspace, and every other module
+  here except `lists.ts` and `menus.ts` builds on it, never the other way
+  round. Those two are shared helpers: caps and "+N more", and
+  right-click menus. A new module joins the coverage list in
+  `package.json`.
 - `src/agents/details.ts`: the Now and Details tab choice and every Details card's rows and show rule.
 - `src/agents/views/`: view builders only. Keep logic out; if a view
   needs a decision, put it in the model and test it there.
