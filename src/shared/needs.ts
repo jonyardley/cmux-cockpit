@@ -13,7 +13,7 @@
 
 import type { SavedAsk, SavedMove } from "../../scripts/state-config.ts";
 import { sinceOrActivity } from "./activity.ts";
-import { asksNothing, quietTurn, waitingMove } from "./move.ts";
+import { asksNothingYet, quietTurn, waitingMove } from "./move.ts";
 import { persistSet, SAVED_STATE } from "./persist.ts";
 import { savedFor } from "./saved.ts";
 
@@ -69,12 +69,13 @@ const asking = (w: Workspace | undefined): Agent[] => (w?.agents ?? []).filter((
  * The move `a`'s turn ended on when it waits on Jon: `a`'s own, current (no
  * prompt since), not an ask, and asking something of him. A reply with no
  * label counts, as a turn with no closing line still waits on him (#322);
- * only "Nothing for you" does not. Null otherwise. Pass `a` as cmux sends
- * it. The Cockpit's `waiting_turn` (native/core/src/needs.rs).
+ * only "Nothing for you" does not, nor one that asked nothing while its
+ * chat's helpers still run (asksNothingYet). Null otherwise. Pass `a` as
+ * cmux sends it. The Cockpit's `waiting_turn` (native/core/src/needs.rs).
  */
 function waitingTurn(a: Agent, w: Workspace | undefined): SavedMove | null {
   const m = waitingMove(a, w, freshAsk(a, w) !== null);
-  return m && !asksNothing(m) ? m : null;
+  return m && !asksNothingYet(m, a, w) ? m : null;
 }
 
 // When `a`'s wait on Jon began, which a dismissal is keyed on: the end of

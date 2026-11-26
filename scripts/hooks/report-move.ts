@@ -21,8 +21,9 @@
 // line is saved instead, marked unlabelled, and the card quotes it in grey,
 // so Jon still sees what the chat ended on without paying for a second turn.
 // When such a reply says "Nothing needed from you" and asks nothing else
-// (saysNothingNeeded), its last line is saved as idle instead, so the turn
-// end waits on the chat, as a "Nothing for you" line does.
+// (quietness), its last line is saved as idle instead, so the turn
+// end waits on the chat, as a "Nothing for you" line does. One that asks
+// nothing without saying so is marked noAsk as well as unlabelled.
 // It never fails the hook: every problem is a note on stderr and exit 0.
 
 import { readFileSync } from "node:fs";
@@ -65,7 +66,7 @@ const MOVE_LINE = new RegExp(
 // a line's start, through the same markdown and "Jon, " the label allows,
 // or straight after a sentence's closing mark and a space ("...for your
 // word. Nothing needed from you."). Mid sentence ("There is nothing needed
-// from you") it is prose. saysNothingNeeded reads the rest of the line.
+// from you") it is prose. quietness reads the rest of the line.
 const NOTHING_NEEDED = new RegExp(
   String.raw`(?:^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?|[.!?]${EMPH}\s+)${EMPH}nothing needed from you\b`,
   "gi",
@@ -246,34 +247,45 @@ const YOURS = /\byours\b/i;
 // rest of it holds a qualifier, a task left as Jon's, or an ask verb where an
 // instruction starts (a sentence break alone is none: "Nothing is running.
 // Nothing needed from you."); any other asks when it opens with an ask verb
-// or on bold or italic.
-function lastAsks(last: string): boolean {
+// or on bold or italic. Once the reply has said "Nothing needed from you"
+// (`saidNothing`), bold alone is no ask: on 26 November "**No action yet;
+// I'll report when the pull request lands.**" closed such a reply and was
+// saved as waiting. It then asks only with an ask verb where an instruction
+// starts.
+function lastAsks(last: string, saidNothing: boolean): boolean {
   const nothing = NOTHING_LAST.exec(last);
   if (nothing) {
     const rest = nothing[1] ?? "";
     return QUALIFIED.test(rest) || YOURS.test(rest) || ASK_WORD.test(rest);
   }
-  return ASK_LAST.test(last) || EMPHASIS_LAST.test(last);
+  if (ASK_LAST.test(last)) return true;
+  return saidNothing ? ASK_WORD.test(unmark(last)) : EMPHASIS_LAST.test(last);
 }
 
 // Whether a reply asks Jon something however it is worded: a question, a
 // decision or waiting title, decisions laid out, or a last line that asks.
-function asksAnything(text: string, lines: readonly string[]): boolean {
+function asksAnything(text: string, lines: readonly string[], saidNothing: boolean): boolean {
   if (lines.some((l) => QUESTION.test(l) || ASK_TITLE.test(l))) return true;
   if (decisionsIn(text).count > 0) return true;
-  return lastAsks(lastRawLine(text) ?? "");
+  return lastAsks(lastRawLine(text) ?? "", saidNothing);
 }
 
 /**
- * Whether a reply with no label asks nothing of Jon: a sentence outside a
- * code fence starts "Nothing needed from you", every such sentence is
- * unqualified, and the reply asks nothing anywhere else. A real ask always
- * wins: a false quiet hides it, a false wait is only noise.
+ * How a reply with no label stands with Jon. "idle" when a sentence outside
+ * a code fence starts "Nothing needed from you", every such sentence is
+ * unqualified, and the reply asks nothing anywhere else. "noAsk" when it
+ * never says so but asks nothing either: a progress reply while the chat's
+ * helpers work, which the sidebars hold on Running while that work runs.
+ * Null when it asks. A real ask always wins: a false quiet hides it, a
+ * false wait is only noise.
  */
-function saysNothingNeeded(text: string): boolean {
+function quietness(text: string): "idle" | "noAsk" | null {
   const lines = unfenced(text);
   const rests = nothingNeededRests(lines);
-  return rests.length > 0 && rests.every(unqualified) && !asksAnything(text, lines);
+  if (!rests.every(unqualified)) return null;
+  const said = rests.length > 0;
+  if (asksAnything(text, lines, said)) return null;
+  return said ? "idle" : "noAsk";
 }
 
 /**
@@ -315,7 +327,7 @@ export function decisionsIn(text: string): { count: number; leans: string } {
 /**
  * What the hook saves for a reply: its labelled line, else, in an
  * interactive chat (`attended`), its last line, marked idle when the reply
- * says nothing is needed from Jon (saysNothingNeeded) and unlabelled
+ * says nothing is needed from Jon (quietness) and unlabelled
  * otherwise; null for a bare label, or a headless run (claude -p, the SDK)
  * with no label, whose output is no chat's move and must not replace one.
  */
@@ -325,15 +337,16 @@ export function moveFrom(text: string, now: number, session?: string, attended =
   const line = found?.line ?? lastLine(text);
   if (!line) return null;
   const { count, leans } = decisionsIn(text);
-  const quiet = found === null && saysNothingNeeded(text);
+  const quiet = found === null ? quietness(text) : null;
   return {
     text: line,
     epoch: now,
     ...(session ? { session } : {}),
     ...(count ? { decisions: count } : {}),
     ...(leans ? { leans } : {}),
-    ...(found?.idle || quiet ? { idle: true } : {}),
-    ...(found || quiet ? {} : { unlabelled: true }),
+    ...(found?.idle || quiet === "idle" ? { idle: true } : {}),
+    ...(found || quiet === "idle" ? {} : { unlabelled: true }),
+    ...(quiet === "noAsk" ? { noAsk: true } : {}),
   };
 }
 

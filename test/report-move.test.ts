@@ -281,6 +281,7 @@ describe("moveFrom", () => {
       text: "Nothing for you yet: CI runs.",
       epoch: 5,
       unlabelled: true,
+      noAsk: true,
     });
   });
 
@@ -384,6 +385,29 @@ describe("moveFrom, a reply that says nothing is needed", () => {
     assert.equal(moveFrom("CI runs! Nothing needed from you.\n\nBack soon.", 5)?.idle, true);
   });
 
+  it("reads a bold closer with no ask verb as quiet once the reply says the phrase", () => {
+    // Jon's live reply on 26 November, saved as waiting before the fix.
+    const text = [
+      "Jon, Cockpit review: option a is planned and building.",
+      "",
+      "**Status**",
+      "One builder running, roughly 15 minutes. A draft pull request, already reviewed, will appear. Nothing needed from you.",
+      "",
+      "**No action yet; I'll report when the pull request lands.**",
+    ].join("\n");
+    assert.deepEqual(moveFrom(text, 5), {
+      text: "No action yet; I'll report when the pull request lands.",
+      epoch: 5,
+      idle: true,
+    });
+    const ask = text.replace(
+      "**No action yet; I'll report when the pull request lands.**",
+      "**Say go and I'll push the fix.**",
+    );
+    waitsOnJon(ask);
+    waitsOnJon(text.replace("lands.**", "lands; then merge it.**"));
+  });
+
   it("lets a reply that lays out decisions wait on Jon", () => {
     const move = moveFrom(`${DECISIONS.replace("Your move:", "Next:")}\n\nNothing needed from you.`, 5);
     assert.equal(move?.unlabelled, true);
@@ -423,7 +447,7 @@ describe("moveFrom, a reply that says nothing is needed", () => {
 
   it("counts the phrase only at a sentence's start, so prose around it stays unlabelled", () => {
     for (const s of ["There is nothing needed from you.", "I said nothing needed from you earlier."]) {
-      assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, unlabelled: true }, s);
+      assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, unlabelled: true, noAsk: true }, s);
     }
   });
 
@@ -457,6 +481,33 @@ const waitsOnJon = (text: string): void => {
   assert.equal(move?.unlabelled, true, text);
   assert.equal(move?.idle, undefined, text);
 };
+
+describe("moveFrom, a reply with no label that asks nothing", () => {
+  it("marks a progress reply noAsk, so it waits on Jon only once its helpers stop", () => {
+    for (const last of ["Still waiting on the reviewer; I'll carry on when it reports.", "The build runs."]) {
+      assert.deepEqual(moveFrom(`Done with the first lane.\n\n${last}`, 5), {
+        text: last,
+        epoch: 5,
+        unlabelled: true,
+        noAsk: true,
+      });
+    }
+  });
+
+  it("never marks one that asks, decides, or qualifies the phrase", () => {
+    for (const text of [
+      "The build runs.\n\nShall I carry on?",
+      "The build runs.\n\n**Say go and I'll push the fix.**",
+      "The build runs.\n\n**The fix is ready.**",
+      `${DECISIONS.replace("Your move:", "Next:")}`,
+      "Nothing needed from you until you merge the first pull request.\n\nThe build runs.",
+    ]) {
+      const move = moveFrom(text, 5);
+      assert.equal(move?.noAsk, undefined, text);
+      assert.equal(move?.idle, undefined, text);
+    }
+  });
+});
 
 describe("moveFrom, a reply that says nothing is needed yet asks", () => {
   it("lets any bold or italic last line that is no 'Nothing' line ask", () => {

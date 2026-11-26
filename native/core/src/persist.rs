@@ -590,6 +590,10 @@ pub struct SavedMove {
     /// Set when the reply had neither label: `text` is its last line, shown in grey.
     #[serde(default)]
     pub unlabelled: Option<bool>,
+    /// Set beside `unlabelled` when the reply asked nothing at all: it
+    /// waits on Jon only once the chat's helpers stop (needs.rs).
+    #[serde(default, rename = "noAsk")]
+    pub no_ask: Option<bool>,
 }
 
 impl Stamped for SavedMove {
@@ -886,6 +890,7 @@ fn saved_move(fields: &Map<String, Value>, text: &str) -> Option<SavedMove> {
     };
     let idle = flag(fields.get("idle"))?;
     let unlabelled = flag(fields.get("unlabelled"))?;
+    let no_ask = flag(fields.get("noAsk"))?;
     Some(SavedMove {
         text: text.to_string(),
         epoch,
@@ -894,6 +899,7 @@ fn saved_move(fields: &Map<String, Value>, text: &str) -> Option<SavedMove> {
         leans,
         idle,
         unlabelled,
+        no_ask,
     })
 }
 
@@ -950,6 +956,9 @@ pub fn move_description(m: &SavedMove) -> String {
     }
     if let Some(u) = m.unlabelled {
         rest.insert("unlabelled".into(), Value::from(u));
+    }
+    if let Some(n) = m.no_ask {
+        rest.insert("noAsk".into(), Value::from(n));
     }
     format!("{} ⟦move {}⟧", m.text, Value::Object(rest))
 }
@@ -1308,6 +1317,27 @@ mod tests {
         let m = move_of_description(Some(d));
         assert_eq!(m.as_ref().and_then(|m| m.unlabelled), Some(true));
         assert_eq!(m.map(|m| move_description(&m)).as_deref(), Some(d));
+    }
+
+    #[test]
+    fn round_trips_a_move_that_asks_nothing() {
+        let d = r##"Still waiting on CI. ⟦move {"epoch":1,"unlabelled":true,"noAsk":true}⟧"##;
+        let m = move_of_description(Some(d));
+        assert_eq!(m.as_ref().and_then(|m| m.no_ask), Some(true));
+        assert_eq!(m.map(|m| move_description(&m)).as_deref(), Some(d));
+        assert_eq!(
+            move_of_description(Some(r##"go ⟦move {"epoch":1,"noAsk":false}⟧"##)),
+            None
+        );
+        let saved = SavedState::from_json(
+            r#"{"moves": {"w1": {"text": "go", "epoch": 1, "unlabelled": true, "noAsk": true}}}"#,
+        );
+        assert_eq!(
+            saved
+                .ok()
+                .and_then(|s| s.moves.get("w1").and_then(|m| m.no_ask)),
+            Some(true)
+        );
     }
 
     #[test]

@@ -14,6 +14,10 @@ function savedVerdict(w: Workspace): SavedRunning | undefined {
   return map && Object.hasOwn(map, w.id) ? map[w.id] : undefined;
 }
 
+/** Whether the core's verdict for `w` counts work for `a`'s chat, whatever `a` is doing. */
+export const helpersRun = (a: Agent, w: Workspace | undefined): boolean =>
+  w !== undefined && savedVerdict(w)?.agent === a.id;
+
 /**
  * What makes `a` read Running, as the card's rule has it: `a` is idle and
  * is the chat the core's verdict for `w` counts work for. Null otherwise,
@@ -21,9 +25,8 @@ function savedVerdict(w: Workspace): SavedRunning | undefined {
  * workspace still reads Idle.
  */
 export function runningFor(a: Agent | null | undefined, w: Workspace | undefined): SavedRunning | null {
-  if (a?.status !== "idle" || !w) return null;
-  const v = savedVerdict(w);
-  return v?.agent === a.id ? v : null;
+  if (a?.status !== "idle" || !w || !helpersRun(a, w)) return null;
+  return savedVerdict(w) ?? null;
 }
 
 /** The status `a` draws in: working while it reads Running, as the card

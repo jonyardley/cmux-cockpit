@@ -166,7 +166,25 @@ pub fn quiet_turn(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Optio
 
 /// The move `a`'s turn ended on when it asks nothing of Jon, or None.
 pub fn quiet_move(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Option<SavedMove> {
-    waiting_move(saved, Some(a), w, false).filter(asks_nothing)
+    waiting_move(saved, Some(a), w, false).filter(|m| asks_nothing_yet(saved, m, a, w))
+}
+
+/// Whether `m` asks nothing of Jon for now: `asks_nothing`, or a reply
+/// that asked nothing at all (`no_ask`) while `a`'s chat still runs
+/// background work by the core's saved verdict (running_save.rs). Once
+/// that work stops the turn waits on him again, so a quiet chat never
+/// hides for good.
+pub fn asks_nothing_yet(
+    saved: &SavedState,
+    m: &SavedMove,
+    a: &Agent,
+    w: Option<&Workspace>,
+) -> bool {
+    let helpers_run = w
+        .and_then(|w| saved.running.get(&w.id))
+        .is_some_and(|r| r.agent == a.id);
+    let no_ask = m.no_ask == Some(true) && !positive(m.decisions.unwrap_or(0.0));
+    asks_nothing(m) || (no_ask && helpers_run)
 }
 
 /// How big answering a move is.
