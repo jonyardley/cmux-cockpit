@@ -205,6 +205,9 @@ interface PullRequest {
   label?: string;
   branch?: string;
   stale?: boolean;
+  /** The native poll's saved health and tone; only the saved PR carries them. */
+  health?: import("../scripts/state-config.ts").PrHealth;
+  tone?: import("../scripts/state-config.ts").PrTone;
 }
 
 interface Workspace {

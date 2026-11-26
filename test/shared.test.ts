@@ -243,34 +243,26 @@ describe("tracked", () => {
 const TONES = ["failing", "conflicts", "running", "ready", "draft", "open", "merged", "closed", "quiet"] as const;
 
 describe("prTone", () => {
-  it("lets a health with a hue win, draft or not", () => {
-    assert.equal(prTone("open", false, "failing"), "failing");
-    assert.equal(prTone("open", true, "failing"), "failing");
-    assert.equal(prTone("open", true, "conflicts"), "conflicts");
-    assert.equal(prTone("open", true, "running"), "running");
-    assert.equal(prTone("open", false, "ready"), "ready");
-  });
-
-  it("reads a quiet PR by its state, as GitHub does: draft, open, merged, closed", () => {
-    assert.equal(prTone("open", true, "quiet"), "draft");
-    assert.equal(prTone("open", false, "quiet"), "open");
-    assert.equal(prTone("open", undefined, "quiet"), "open");
-    assert.equal(prTone("merged", false, "quiet"), "merged");
-    assert.equal(prTone("closed", false, "quiet"), "closed");
+  it("reads a PR with no saved tone by its state, as GitHub does: draft, open, merged, closed", () => {
+    assert.equal(prTone("open", true), "draft");
+    assert.equal(prTone("open", false), "open");
+    assert.equal(prTone("open", undefined), "open");
+    assert.equal(prTone("merged", false), "merged");
+    assert.equal(prTone("closed", false), "closed");
   });
 
   it("keeps a PR with no status grey, never claiming open", () => {
-    assert.equal(prTone(undefined, false, "quiet"), "quiet");
-    assert.equal(prTone(undefined, true, "quiet"), "quiet");
+    assert.equal(prTone(undefined, false), "quiet");
+    assert.equal(prTone(undefined, true), "quiet");
   });
 
   it("says a merged or closed draft by its status, not its draft flag", () => {
-    assert.equal(prTone("merged", true, "quiet"), "merged");
-    assert.equal(prTone("closed", true, "quiet"), "closed");
+    assert.equal(prTone("merged", true), "merged");
+    assert.equal(prTone("closed", true), "closed");
   });
 
   it('greys a stale ready, so its "ready" never borrows open\'s green', () => {
-    assert.equal(shownTone(prTone("open", false, "ready"), true), "quiet");
+    assert.equal(shownTone("ready", true), "quiet");
     assert.equal(shownTone("ready", false), "ready");
   });
 

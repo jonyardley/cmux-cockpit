@@ -1,6 +1,6 @@
 // The PR chip's palette, one copy for both sidebars so a PR reads the same
-// in each. A PR's state words take its tone (prTone): a health with a hue
-// wins, red failing or in conflict (the words tell the two apart), blue
+// in each. A PR's state words take its tone, which the native core saves
+// with each PR it polls (pr_colors.rs pr_tone): a health with a hue wins, red failing or in conflict (the words tell the two apart), blue
 // running (the Checks block's pending dot and the working dot are blue too)
 // and ready's own green ink; a quiet PR then reads by its state, as GitHub
 // colours it: grey draft and closed, green open, purple merged. Open's green
@@ -11,21 +11,16 @@
 // edge of its tone's hue, so every state still reads on the white card. The
 // branch, ports and review chips keep the quiet pill.
 
+import type { PrTone } from "../../scripts/state-config.ts";
 import { P } from "./palette.ts";
-import type { PrHealth } from "./prs.ts";
+
+export type { PrTone } from "../../scripts/state-config.ts";
 
 export interface ChipColors {
   bg: string;
   fg: string;
   edge: string;
 }
-
-/**
- * What colours a PR's words: its health when that has a hue, else its state.
- * "draft" is an open draft; "quiet" is grey with nothing to say, a PR with
- * no status or a stale ready (shownTone).
- */
-export type PrTone = Exclude<PrHealth, "quiet"> | "draft" | "open" | "merged" | "closed" | "quiet";
 
 /** The quiet chip: the branch, the ports, and a PR's number. */
 export const NEUTRAL_CHIP: ChipColors = { bg: P.chipFace, fg: P.secondary, edge: P.chipEdge };
@@ -63,12 +58,12 @@ const TONE_FACE: Record<PrTone, Omit<ChipColors, "fg">> = {
 };
 
 /**
- * A PR's tone: a health with a hue wins (a failing draft is red); a quiet
- * PR reads by its state, a merged or closed one by its status whatever its
- * draft flag, and one with no status stays grey rather than claim open.
+ * The tone of a PR the core saved none for (one of Jon's own, cmux's own PR
+ * with no saved match, an entry saved before #426): its state alone, a
+ * merged or closed one by its status whatever its draft flag, and one with
+ * no status grey rather than claim open.
  */
-export function prTone(status: PrStatus | undefined, draft: boolean | undefined, health: PrHealth): PrTone {
-  if (health !== "quiet") return health;
+export function prTone(status: PrStatus | undefined, draft: boolean | undefined): PrTone {
   if (status === "merged" || status === "closed") return status;
   if (status !== "open") return "quiet";
   return draft ? "draft" : "open";

@@ -15,9 +15,25 @@ globals.__STATE__ = {
   projectOverride: {},
   projects: {},
   prs: {
-    w1: saved,
-    green: { ...saved, number: 8, branch: "green", checks: [{ name: "build", state: "pass" }] },
-    ready: { ...saved, number: 6, branch: "ready", mergeable: true, checks: [{ name: "build", state: "pass" }] },
+    // With the health and tone the native poll saves (pr_poll.rs stamp_look).
+    w1: { ...saved, health: "quiet", tone: "open" },
+    green: {
+      ...saved,
+      health: "quiet",
+      tone: "open",
+      number: 8,
+      branch: "green",
+      checks: [{ name: "build", state: "pass" }],
+    },
+    ready: {
+      ...saved,
+      health: "ready",
+      tone: "ready",
+      number: 6,
+      branch: "ready",
+      mergeable: true,
+      checks: [{ name: "build", state: "pass" }],
+    },
   },
   ownPrs: {},
   subagents: {},

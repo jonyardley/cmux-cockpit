@@ -12,16 +12,23 @@ const pass = [{ name: "build", state: "pass" }];
 const url = (n: number): string => "https://github.com/o/r/pull/" + n;
 const open = (n: number) => ({ number: n, url: url(n), status: "open", branch: "feat", checks: pass });
 
+// Each with the health and tone the native poll saves (pr_poll.rs stamp_look).
+const look = (health: string, tone: string) => ({ health, tone });
 const prs: Record<string, Record<string, unknown>> = {
-  ready: { ...open(296), mergeable: true },
-  draft: { ...open(2), draft: true, mergeable: true },
-  draftRunning: { ...open(3), draft: true, checks: [{ name: "test", state: "pending" }] },
-  failing: { ...open(4), mergeable: true, checks: [{ name: "build", state: "fail" }] },
-  conflicts: { ...open(5), conflicts: true },
-  merged: { ...open(6), status: "merged", mergeable: true },
+  ready: { ...open(296), mergeable: true, ...look("ready", "ready") },
+  draft: { ...open(2), draft: true, mergeable: true, ...look("quiet", "draft") },
+  draftRunning: {
+    ...open(3),
+    draft: true,
+    checks: [{ name: "test", state: "pending" }],
+    ...look("running", "running"),
+  },
+  failing: { ...open(4), mergeable: true, checks: [{ name: "build", state: "fail" }], ...look("failing", "failing") },
+  conflicts: { ...open(5), conflicts: true, ...look("conflicts", "conflicts") },
+  merged: { ...open(6), status: "merged", mergeable: true, ...look("quiet", "merged") },
   // Out of draft, checks passed, before GitHub's merge verdict was saved:
   // what config/state.json held for #296 while the screenshot was taken.
-  noVerdict: { ...open(7) },
+  noVerdict: { ...open(7), ...look("quiet", "open") },
 };
 
 // Each open PR is also one of Jon's own, opened by its workspace's chat.
