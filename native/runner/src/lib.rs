@@ -822,6 +822,22 @@ pub fn run_without_core(
     );
 }
 
+// Those threads end only with the runner, so a closed channel means one panicked.
+fn send_or_log<T>(
+    tx: &Sender<T>,
+    value: T,
+    name: &str,
+    lost: &mut bool,
+    log: &mut impl FnMut(String),
+) {
+    if tx.send(value).is_err() && !*lost {
+        *lost = true;
+        log(format!(
+            "{name}: thread stopped, likely panicked; its data will stay stale"
+        ));
+    }
+}
+
 fn run_with(
     opts: &Options,
     mut feed: Feed,
@@ -914,6 +930,7 @@ fn run_with(
     let mut last_input = start;
     // The workspace folders last sent to the Ostinato watch.
     let mut open: Vec<String> = Vec::new();
+    let (mut nudge_lost, mut open_lost) = (false, false);
 
     loop {
         // A PR ask falling due brings a frame then, not at the next clock tick.
@@ -952,7 +969,7 @@ fn run_with(
             let (changed, nudge, latency) = feed.input(input);
             pending |= changed;
             if nudge {
-                let _ = nudge_tx.send(());
+                send_or_log(&nudge_tx, (), "layout poll", &mut nudge_lost, &mut log);
             }
             if live {
                 latest = latency.or(latest);
@@ -975,7 +992,13 @@ fn run_with(
             feed.frame(now_epoch());
             let folders = feed.open_folders();
             if folders != open {
-                let _ = open_tx.send(folders.clone());
+                send_or_log(
+                    &open_tx,
+                    folders.clone(),
+                    "ostinato watch",
+                    &mut open_lost,
+                    &mut log,
+                );
                 open = folders;
             }
             let latency = latest.take();
@@ -1665,6 +1688,20 @@ mod tests {
         assert_eq!(
             placed(&feed).0,
             vec![(LaneKey::from("bg"), "Q".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_closed_channel_is_logged_once() {
+        let (tx, rx) = mpsc::channel();
+        drop(rx);
+        let mut lines = Vec::new();
+        let mut lost = false;
+        send_or_log(&tx, (), "layout poll", &mut lost, &mut |l| lines.push(l));
+        send_or_log(&tx, (), "layout poll", &mut lost, &mut |l| lines.push(l));
+        assert_eq!(
+            lines,
+            ["layout poll: thread stopped, likely panicked; its data will stay stale"]
         );
     }
 

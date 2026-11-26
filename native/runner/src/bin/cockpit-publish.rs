@@ -111,7 +111,7 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     };
     let signal = Box::new(|| signal::post(signal::CHANGED));
-    let mut publisher = match Publisher::new(root.clone(), signal) {
+    let mut publisher = match Publisher::new(root.clone(), signal, &mut log) {
         Ok(p) => p,
         Err(e) => {
             log(format!("{}: {e}", root.display()));
