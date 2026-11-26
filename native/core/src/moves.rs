@@ -12,7 +12,7 @@ use regex::Regex;
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::positive;
 use crate::owner::owns;
-use crate::persist::{SavedMove, SavedState, TaskType, move_of_description};
+use crate::persist::{MoveVerdict, SavedMove, SavedState, TaskType, move_of_description};
 use crate::saved::saved_for;
 
 /// Descriptions parsed so far, at most PARSED_MAX: the move is read
@@ -146,10 +146,16 @@ fn test(re: &LazyLock<Option<Regex>>, s: &str) -> bool {
 
 /// True when the move asks nothing of Jon: saved as idle ("Nothing for
 /// you:"), or the older "Your move: nothing." or "nothing waits on you". A
-/// reply that laid out decisions always asks something.
+/// reply that laid out decisions always asks something. A model's verdict
+/// on the whole reply, once written, overrides the wording.
 pub fn asks_nothing(m: &SavedMove) -> bool {
-    !positive(m.decisions.unwrap_or(0.0))
-        && (m.idle == Some(true) || test(&NOTHING_WAITS, &m.text) || test(&NOTHING_FIRST, &m.text))
+    if positive(m.decisions.unwrap_or(0.0)) {
+        return false;
+    }
+    if let Some(v) = m.verdict {
+        return v == MoveVerdict::Quiet;
+    }
+    m.idle == Some(true) || test(&NOTHING_WAITS, &m.text) || test(&NOTHING_FIRST, &m.text)
 }
 
 /// Whether `m` asks nothing of Jon for now: `asks_nothing`, or a reply
@@ -157,13 +163,17 @@ pub fn asks_nothing(m: &SavedMove) -> bool {
 /// subagents by the core's saved verdict (running_save.rs). Only agents
 /// hold it: a shell, monitor or background session can run for hours, so
 /// the turn would hide all that time. Once the agents stop the turn waits
-/// on him again, so a quiet chat never hides for good.
+/// on him again, so a quiet chat never hides for good. A model's verdict
+/// settles it alone.
 pub fn asks_nothing_yet(
     saved: &SavedState,
     m: &SavedMove,
     a: &Agent,
     w: Option<&Workspace>,
 ) -> bool {
+    if m.verdict.is_some() {
+        return asks_nothing(m);
+    }
     let agents_run = w.and_then(|w| saved.running.get(&w.id)).is_some_and(|r| {
         r.agent == a.id
             && r.counts
@@ -238,6 +248,77 @@ mod tests {
             ..quoted
         };
         assert_eq!(move_size(&deciding), Some(MoveSize::Decide));
+    }
+
+    fn verdict_saved(session: &str) -> SavedState {
+        SavedState::from_json(&format!(
+            r#"{{"running": {{"w": {{"agent": "{session}", "since": 950,
+                "counts": [{{"type": "subagent", "n": 1}}]}}}}}}"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_models_verdict_overrides_the_wording_both_ways() {
+        let idle = SavedMove {
+            text: "Nothing for you: tests run on".into(),
+            idle: Some(true),
+            ..SavedMove::default()
+        };
+        let waits = SavedMove {
+            verdict: Some(MoveVerdict::Waits),
+            ..idle.clone()
+        };
+        assert!(asks_nothing(&idle));
+        assert!(!asks_nothing(&waits));
+        let asking = SavedMove {
+            text: "Say go and I'll push.".into(),
+            unlabelled: Some(true),
+            no_ask: Some(true),
+            ..SavedMove::default()
+        };
+        let quiet = SavedMove {
+            verdict: Some(MoveVerdict::Quiet),
+            ..asking.clone()
+        };
+        assert!(!asks_nothing(&asking));
+        assert!(asks_nothing(&quiet));
+        let deciding = SavedMove {
+            decisions: Some(1.0),
+            ..quiet.clone()
+        };
+        assert!(!asks_nothing(&deciding), "decisions always ask");
+    }
+
+    #[test]
+    fn a_models_verdict_settles_asks_nothing_yet_while_helpers_run() {
+        let a = claude("c", &[]);
+        let w = ws(std::slice::from_ref(&a), 950.0);
+        let saved = verdict_saved("c");
+        let no_ask = SavedMove {
+            text: "Still waiting on CI.".into(),
+            unlabelled: Some(true),
+            no_ask: Some(true),
+            ..SavedMove::default()
+        };
+        assert!(asks_nothing_yet(&saved, &no_ask, &a, Some(&w)));
+        let waits = SavedMove {
+            verdict: Some(MoveVerdict::Waits),
+            ..no_ask.clone()
+        };
+        assert!(!asks_nothing_yet(&saved, &waits, &a, Some(&w)));
+        let quiet = SavedMove {
+            text: "Say go and I'll push.".into(),
+            unlabelled: Some(true),
+            verdict: Some(MoveVerdict::Quiet),
+            ..SavedMove::default()
+        };
+        assert!(asks_nothing_yet(
+            &SavedState::default(),
+            &quiet,
+            &a,
+            Some(&w)
+        ));
     }
 
     fn claude(id: &str, earlier: &[&str]) -> Agent {

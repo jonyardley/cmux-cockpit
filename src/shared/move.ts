@@ -75,17 +75,24 @@ const NOTHING_FIRST = /^nothing[.:]/i;
  * True when the move asks nothing of Jon: the reply ended on "Nothing for
  * you:" (saved as idle), or on the older "Your move: nothing. Waiting until
  * X." or "nothing waits on you". "Nothing follows" is not one: it ends in
- * /clear. A reply that laid out decisions always asks something, whatever
- * its last line says.
+ * /clear. A model's verdict on the whole reply, once written, overrides
+ * that wording. A reply that laid out decisions always asks something,
+ * whatever its last line or verdict says.
  */
-export const asksNothing = (m: Pick<SavedMove, "text" | "idle" | "decisions">): boolean =>
-  !((m.decisions ?? 0) > 0) && (m.idle === true || NOTHING_WAITS.test(m.text) || NOTHING_FIRST.test(m.text));
+export const asksNothing = (m: Pick<SavedMove, "text" | "idle" | "decisions" | "verdict">): boolean => {
+  if ((m.decisions ?? 0) > 0) return false;
+  if (m.verdict !== undefined) return m.verdict === "quiet";
+  return m.idle === true || NOTHING_WAITS.test(m.text) || NOTHING_FIRST.test(m.text);
+};
 
 /**
  * True when the move asks nothing of Jon for now: asksNothing, or a reply
  * that asked nothing at all (noAsk) while `a`'s chat still runs subagents
  * by the core's saved verdict. Once they stop the turn waits on him again.
- * The Cockpit's `asks_nothing_yet` (native/core/src/moves.rs).
+ * A model's verdict settles it alone. The Cockpit's `asks_nothing_yet`
+ * (native/core/src/moves.rs).
  */
 export const asksNothingYet = (m: SavedMove, a: Agent, w: Workspace | undefined): boolean =>
-  asksNothing(m) || (m.noAsk === true && !((m.decisions ?? 0) > 0) && agentsRun(a, w));
+  m.verdict !== undefined
+    ? asksNothing(m)
+    : asksNothing(m) || (m.noAsk === true && !((m.decisions ?? 0) > 0) && agentsRun(a, w));

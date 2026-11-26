@@ -45,6 +45,7 @@ import { logLine } from "../state-log.ts";
 import { readApplyWrite } from "../state-url.ts";
 import { type DescriptionRead, readDescription, withDescriptionLock, writeDescription } from "./description.ts";
 import { field } from "./gh-command.ts";
+import { isVerdictChild, startVerdict, verdictTarget } from "./move-verdict.ts";
 import { readTail, replyFrom, sleep, TAIL_BYTES } from "./transcript.ts";
 
 // The line's label as Jon's rules write it: "Your move:" when the turn
@@ -437,16 +438,19 @@ function record(event: unknown, wsId: string | undefined, now: number, attended:
   if (!wsId || !isId(wsId) || field(event, "hook_event_name") !== "Stop") return null;
   const raw = field(event, "session_id");
   const session = typeof raw === "string" && isId(raw) ? raw : undefined;
-  const move = moveFrom(finalReply(event), now, session, attended);
+  const reply = finalReply(event);
+  const move = moveFrom(reply, now, session, attended);
   // The lock keeps the status line's context writer from putting back the
   // description it read before this move went in (description.ts). Waiting
   // out a stuck holder costs at most the wait, then the move goes ahead.
-  return withDescriptionLock(
+  const note = withDescriptionLock(
     wsId,
     3000,
     () => deliver(wsId, move, REAL_DELIVERY),
     () => deliver(wsId, move, REAL_DELIVERY),
   );
+  if (move && attended && note === null) startVerdict(verdictTarget(wsId, move), reply);
+  return note;
 }
 
 export interface Delivery {
@@ -547,7 +551,7 @@ export function deliver(wsId: string, move: SavedMove | null, d: Delivery): stri
   return d.hasSaved(wsId) ? save(wsId, null, d) : null;
 }
 
-if (import.meta.main) {
+if (import.meta.main && !isVerdictChild(process.env)) {
   const now = Math.floor(Date.now() / 1000);
   // "cli" is an interactive chat; a headless run names another entry point.
   const attended = process.env.CLAUDE_CODE_ENTRYPOINT === "cli";

@@ -974,7 +974,7 @@ first 240 characters of a message, so the sidebar never sees that line.
 the transcript's tail, read once more after a pause when a prompt or a tool
 result still comes after the last reply, since that reply is not the final
 one) and hands the line to the cockpit as a move:
-`{"text", "epoch", "session"?, "decisions"?, "leans"?, "idle"?, "unlabelled"?}`.
+`{"text", "epoch", "session"?, "decisions"?, "leans"?, "idle"?, "unlabelled"?, "noAsk"?, "verdict"?}`.
 Only the exact label counts ("Your move:" or "Nothing for you:", markdown
 aside); a reply with neither is never sent back for one: its last line is
 saved as an `unlabelled` move, which the card shows in grey. The move
@@ -1020,6 +1020,23 @@ to the latest message. Like `asking`, the map goes through
 `applySet` and is refused from a URL, but a new move drops any other more
 than a week older (`MOVE_MAX_AGE_S`, since a chat can wait over a weekend),
 and `MAX_ENTRIES` caps it.
+
+The wording flags are a guess, so once the move is saved the hook starts
+`scripts/hooks/move-verdict.ts` detached, in its own process group, and
+returns. It asks Haiku through `claude -p` (from a temporary folder, no
+settings, tools or MCP, with `COCKPIT_VERDICT_CHILD=1`, which makes the
+move hook do nothing in that run) whether the reply's last 6,000
+characters wait on Jon, and writes `verdict`: `"waits"` or `"quiet"`
+onto the same move, in the description or the `moves` map, under the
+description lock, only while that move still has the epoch, session and
+text it was started for. A failure, a malformed answer or no answer within
+20s writes nothing, and the state log says which. When present, the
+verdict overrides the wording: `asks_nothing` and `asks_nothing_yet`
+(native/core/src/moves.rs) and `asksNothing` and `asksNothingYet`
+(src/shared/move.ts) read it before `idle`, `noAsk` and the line's words,
+though a reply that laid out decisions still always asks.
+`node scripts/hooks/move-verdict.ts --replay <file>` prints the verdict
+for each JSON line of past replies, to set it against the wording rules.
 
 `src/shared/move.ts` shows the move while the agent is at a turn end and
 no prompt has come since it was saved: cmux says idle or needs_input (never

@@ -512,7 +512,17 @@ export interface SavedMove {
   unlabelled?: true;
   /** Set beside `unlabelled` when the reply asked nothing at all: it waits on Jon only once the chat's helpers stop. */
   noAsk?: true;
+  /**
+   * A small model's reading of the whole reply, written after the move by
+   * scripts/hooks/move-verdict.ts: "waits" when it waits on Jon, "quiet"
+   * when it does not. When present it overrides the wording flags.
+   */
+  verdict?: MoveVerdict;
 }
+
+/** What the model said of a reply: it waits on Jon, or it does not. */
+export type MoveVerdict = "waits" | "quiet";
+const isVerdict = (v: unknown): v is MoveVerdict => v === "waits" || v === "quiet";
 
 /** The longest "Your move" line kept; the hook cuts one to this. */
 export const MAX_MOVE = 200;
@@ -863,16 +873,17 @@ const isDecisions = (v: unknown): v is number =>
 
 // A move's optional fields: each absent or well formed, its flags only true.
 function movePartsOk(v: Record<string, unknown>): boolean {
-  const { session, decisions, leans, idle, unlabelled, noAsk } = v;
+  const { session, decisions, leans, idle, unlabelled, noAsk, verdict } = v;
   if (session !== undefined && (typeof session !== "string" || !isId(session))) return false;
   if (decisions !== undefined && !isDecisions(decisions)) return false;
   if (leans !== undefined && !isLeans(leans)) return false;
+  if (verdict !== undefined && !isVerdict(verdict)) return false;
   return [idle, unlabelled, noAsk].every((f) => f === undefined || f === true);
 }
 
 function savedMove(v: unknown): SavedMove | null {
   if (!isRecord(v) || !isText(v.text, MAX_MOVE) || !isEpoch(v.epoch) || !movePartsOk(v)) return null;
-  const { session, decisions, leans, idle, unlabelled, noAsk } = v;
+  const { session, decisions, leans, idle, unlabelled, noAsk, verdict } = v;
   return {
     text: v.text,
     epoch: v.epoch,
@@ -882,6 +893,7 @@ function savedMove(v: unknown): SavedMove | null {
     ...(idle === true ? { idle } : {}),
     ...(unlabelled === true ? { unlabelled } : {}),
     ...(noAsk === true ? { noAsk } : {}),
+    ...(isVerdict(verdict) ? { verdict } : {}),
   };
 }
 
@@ -1397,7 +1409,7 @@ export const MOVE_MAX_AGE_S = 7 * 24 * 60 * 60;
 function moveEntry(state: State, id: string, parsed: unknown): State | string {
   const move = savedMove(parsed);
   if (!move)
-    return "moves wants {text, epoch, session?, decisions?, leans?, idle?: true, unlabelled?: true, noAsk?: true}";
+    return "moves wants {text, epoch, session?, decisions?, leans?, idle?: true, unlabelled?: true, noAsk?: true, verdict?: waits | quiet}";
   const kept = Object.entries(state.moves).filter(([, m]) => m.epoch >= move.epoch - MOVE_MAX_AGE_S);
   return { ...state, moves: { ...Object.fromEntries(kept), [id]: move } };
 }

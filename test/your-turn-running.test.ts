@@ -41,15 +41,35 @@ const AGENT = { since: NOW - 240, counts: [{ type: "subagent", n: 1 }] };
     noask: { text: "the reviewer still runs.", epoch: END, session: "c-noask", unlabelled: true, noAsk: true },
     noaskdone: { text: "the reviewer still runs.", epoch: END, session: "c-noaskdone", unlabelled: true, noAsk: true },
     noaskshell: { text: "the dev server runs.", epoch: END, session: "c-noaskshell", unlabelled: true, noAsk: true },
+    saysquiet: { text: "Shall I go on?", epoch: END, session: "c-saysquiet", unlabelled: true, verdict: "quiet" },
+    sayswaits: { text: "the dev server runs on.", epoch: END, session: "c-sayswaits", idle: true, verdict: "waits" },
+    noaskwaits: {
+      text: "the reviewer still runs.",
+      epoch: END,
+      session: "c-noaskwaits",
+      unlabelled: true,
+      noAsk: true,
+      verdict: "waits",
+    },
   },
   running: {
     ...Object.fromEntries(
-      ["turn", "nudged", "bare", "quiet", "gone", "other", "answered", "dismiss", "noaskshell"].map((id) => [
-        id,
-        running("c-" + id),
-      ]),
+      [
+        "turn",
+        "nudged",
+        "bare",
+        "quiet",
+        "gone",
+        "other",
+        "answered",
+        "dismiss",
+        "noaskshell",
+        "saysquiet",
+        "sayswaits",
+      ].map((id) => [id, running("c-" + id)]),
     ),
     noask: { agent: "c-noask", ...AGENT },
+    noaskwaits: { agent: "c-noaskwaits", ...AGENT },
   },
   ui: {},
 };
@@ -129,6 +149,15 @@ describe("a turn that asks Jon something while its chat's work runs", () => {
 
   it("says Your turn on a reply that asked nothing while only a shell runs, as it can run for hours", () => {
     selected("noaskshell", stopped("noaskshell"));
+    assert.deepEqual(head(), YOUR_TURN);
+  });
+
+  it("follows the model's verdict over the wording, both ways, even while agents run", () => {
+    selected("saysquiet", stopped("saysquiet"));
+    assert.deepEqual(head(), RUNNING);
+    selected("sayswaits", stopped("sayswaits"));
+    assert.deepEqual(head(), YOUR_TURN);
+    selected("noaskwaits", stopped("noaskwaits"));
     assert.deepEqual(head(), YOUR_TURN);
   });
 
