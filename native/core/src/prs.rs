@@ -14,7 +14,7 @@ use crate::persist::{SavedCheck, SavedPr, SavedState};
 use crate::text::clean_title;
 
 /// What a PR's chip says about it: its worst state, or quiet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PrHealth {
     Failing,
