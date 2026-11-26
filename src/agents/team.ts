@@ -1,6 +1,7 @@
 // The selected workspace's agents and the subagents (Helpers) they run.
 // Pure reads of `data`, so each is testable alone.
 
+import { copyableBranch } from "../shared/copyable.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { SAVED_STATE } from "../shared/persist.ts";
 import { childRunning, pairLive, type SavedRun, savedRunning, savedRuns } from "../shared/subagents.ts";
@@ -9,7 +10,8 @@ import { ageSince } from "../shared/time.ts";
 import { countTint, type PillColors } from "../shared/ui.ts";
 import { moreThan } from "./lists.ts";
 
-import { cur, type MenuEntry } from "./model.ts";
+import type { MenuEntry } from "./menus.ts";
+import { cur } from "./model.ts";
 
 // ---- This workspace's agent list -------------------------------------------
 
@@ -62,12 +64,11 @@ export const agentRows = computed((): Last<AgentRow>[] => {
   return markLast(live.slice(0, 6).map((a) => ({ key: "a:" + a.id, a, label: labels.get(a.id) ?? fallbackLabel(a) })));
 });
 
-/** An agent row's right-click menu: go to that agent, and copy the
- * workspace's branch while it has one. */
 export function agentMenu(a: Agent, w: Workspace): MenuEntry[] {
+  const branch = copyableBranch(w.branch);
   return [
     { label: "Go to this agent", does: { agent: { wsId: w.id, surfaceId: a.surfaceId } } },
-    ...(w.branch ? [{ label: "Copy branch name", does: { copy: w.branch } }] : []),
+    ...(branch ? [{ label: "Copy branch name", does: { copy: branch } }] : []),
   ];
 }
 

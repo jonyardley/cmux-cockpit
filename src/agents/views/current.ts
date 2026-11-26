@@ -17,6 +17,7 @@ import {
   when,
 } from "../../shared/ui.ts";
 import { type CheckRow, canFix, checkDot, checks, checksLine, checkWord, openChecks, sendFix } from "../checks.ts";
+import { jump } from "../menus.ts";
 import {
   askedLine,
   branchFooter,
@@ -48,7 +49,7 @@ import {
   type SubagentRow,
 } from "../team.ts";
 import { STALE_OPACITY, STATUS_DOT, T } from "../theme.ts";
-import { agentDot, jump, panel, ruled, withMenu } from "./parts.ts";
+import { agentDot, panel, ruled, withMenu } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
   const a = () => e().a;

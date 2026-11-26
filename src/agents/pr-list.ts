@@ -3,6 +3,7 @@
 
 import { mostActive } from "../shared/activity.ts";
 import { placeholderIds } from "../shared/anchors.ts";
+import { copyableBranch, copyableLink } from "../shared/copyable.ts";
 import type { Last } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type PrTone, prTone, shownTone } from "../shared/pr-colors.ts";
@@ -21,7 +22,8 @@ import {
 import { displayTitle } from "../shared/titles.ts";
 import { footText, isExpanded, markLastBefore, moreThan } from "./lists.ts";
 
-import { chatWs, dotFor, freshness, hollowDot, type MenuEntry, prStale } from "./model.ts";
+import { type MenuEntry, tidyMenu } from "./menus.ts";
+import { chatWs, dotFor, freshness, hollowDot, prStale } from "./model.ts";
 
 // ---- Pull requests ----------------------------------------------------------
 
@@ -38,20 +40,6 @@ export interface PrEntry {
   project: Project;
   /** The session it belongs to; undefined when none holds or opened it, or that chat has closed. */
   session: PrSession | undefined;
-}
-
-/** Where a row's chat item goes: the workspace, and its lead agent's
- * surface when it has one (views/parts.ts jump). */
-export interface ChatTarget {
-  wsId: string;
-  surfaceId: string | undefined;
-}
-
-/** Where a row's chat item jumps, read when it is chosen, so it focuses the agent the
- * panel leads with then; none once the workspace has gone. */
-export function chatTarget(wsId: string): ChatTarget | undefined {
-  const w = (data.workspaces() ?? []).find((x) => x.id === wsId);
-  return w ? { wsId, surfaceId: mostActive(agentsOf(w))?.surfaceId } : undefined;
 }
 
 /** The chat a PR row names on its faint line, with that chat's status dot. */
@@ -205,22 +193,17 @@ export const prs = computed((): Last<PrEntry>[] => {
  * or gh is down, "gh unavailable · last checked 2h ago"; "" when fresh. */
 export const prNote = computed((): string => freshness().line);
 
-/** A PR row's right-click menu: open it, copy its link and branch, then,
- * set apart, go to the chat it belongs to while there is one to go to. */
 export function prMenu(e: Pick<PrEntry, "pr" | "session">): MenuEntry[] {
   const url = e.pr.url ?? "";
-  const branch = e.pr.branch ?? "";
+  const link = copyableLink(url);
+  const branch = copyableBranch(e.pr.branch);
   const chat = e.session?.chat;
-  return [
-    ...(url
-      ? [
-          { label: "Open pull request", does: { open: url } },
-          { label: "Copy link", does: { copy: url } },
-        ]
-      : []),
+  return tidyMenu([
+    ...(url ? [{ label: "Open pull request", does: { open: url } }] : []),
+    ...(link ? [{ label: "Copy link", does: { copy: link } }] : []),
     ...(branch ? [{ label: "Copy branch name", does: { copy: branch } }] : []),
     ...(chat ? ["divider" as const, { label: "Go to its chat", does: { chat } }] : []),
-  ];
+  ]);
 }
 
 /** A PR row's chip dims while it is the poller's copy and that copy is stale. */

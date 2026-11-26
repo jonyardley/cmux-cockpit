@@ -3,10 +3,10 @@
 
 import type { Last } from "../../shared/list.ts";
 import { META_FONT, meta, openIfUrl, when } from "../../shared/ui.ts";
-import { type MadeEntry, madeAge, madeTitleColor } from "../made.ts";
+import { type MadeEntry, madeAge, madeMenu, madeTitleColor } from "../made.ts";
 import { isHerePr, type PrEntry, prMenu, prNumberText } from "../pr-list.ts";
 import { HERE_FACE, HERE_HOVER, T } from "../theme.ts";
-import { glyph, prChip, ruled, withChatMenu, withMenu } from "./parts.ts";
+import { glyph, prChip, ruled, withMenu } from "./parts.ts";
 
 /** The quiet row a capped list ends in: "+12 more", or "Show less" once
  * open. Tapping it opens or folds the card. */
@@ -90,7 +90,7 @@ export function prRow(e: () => Last<PrEntry>): View {
 /** One page or doc an agent published: its project's tile (grey when the
  * workspace that made it is unknown), title and age; shaded with a bold title
  * when this chat made it, as its PR row is. Tap opens it on claude.ai; a
- * right-click offers Open chat while that workspace is open. */
+ * right-click offers Go to its chat while that workspace is open. */
 export function madeRow(e: () => Last<MadeEntry>): View {
   const row = () =>
     HStack({ spacing: 10 }, [
@@ -113,7 +113,7 @@ export function madeRow(e: () => Last<MadeEntry>): View {
       .cursor("pointer")
       .onTap(() => openIfUrl(e().url));
   return ruled(
-    withChatMenu(row, () => e().chat),
+    withMenu(row, () => madeMenu(e())),
     () => e().last,
   );
 }

@@ -2,19 +2,9 @@
 
 import { prChipColors } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
-import {
-  chipFrame,
-  chipText,
-  countPill,
-  haloDot,
-  openIfUrl,
-  projectBadge,
-  ring,
-  sectionTitle,
-  when,
-} from "../../shared/ui.ts";
-import type { MenuAction, MenuEntry } from "../model.ts";
-import { chatTarget, type PrEntry, prChipText, prChipTone, prDim } from "../pr-list.ts";
+import { chipFrame, chipText, countPill, haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
+import { chooseMenuItem, type MenuEntry, menuKey, tidyMenu } from "../menus.ts";
+import { type PrEntry, prChipText, prChipTone, prDim } from "../pr-list.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 
 // White panel with a hairline edge: the runtime has no shadows, so depth is
@@ -63,57 +53,15 @@ export function agentDot(color: () => string, halo: () => string, hollow: () => 
 // by link, whose workspace loads late or closes) still follows it.
 export const glyph = (p: () => Project, size = 18): View => projectBadge(p, size, size / 2);
 
-/** Selects the workspace, then focuses the agent's surface when it has one. */
-export function jump(wsId: string, surfaceId: string | undefined): void {
-  cmux("workspace.select", { workspace_id: wsId });
-  if (surfaceId) cmux("surface.focus", { surface_id: surfaceId, workspace_id: wsId });
-}
-
-/** A row with a right-click Open chat while it has a workspace to go to
- * (model.ts chatWs). Two `when`s, since a row's menu is fixed when it is
- * built and a ForEach row's kind is fixed by its key; returned bare, for
- * ruled to hold, so no stack is added round the row. */
-export function withChatMenu(row: () => View, chat: () => string | undefined): View[] {
-  const open = () => {
-    const t = chatTarget(chat() ?? "");
-    if (t) jump(t.wsId, t.surfaceId);
-  };
-  return [
-    when(
-      "chat",
-      () => !!chat(),
-      () => row().contextMenu([Button("Open chat", open)]),
-    ),
-    when("plain", () => !chat(), row),
-  ];
-}
-
-function runMenu(does: MenuAction): void {
-  if ("open" in does) openIfUrl(does.open);
-  else if ("copy" in does) clipboard.write(does.copy);
-  else if ("agent" in does) jump(does.agent.wsId, does.agent.surfaceId);
-  else {
-    const t = chatTarget(does.chat);
-    if (t) jump(t.wsId, t.surfaceId);
-  }
-}
-
-/** A row with the right-click menu its model lists (model.ts MenuEntry).
- * A row's menu is fixed when it is built, so the row is keyed by its
- * labels and rebuilt when they change; each item reads the list again
- * when chosen, so it acts on the data as it is then. */
 export function withMenu(row: () => View, items: () => readonly MenuEntry[]): View {
-  const shape = () =>
-    items()
-      .map((i) => (i === "divider" ? "-" : i.label))
-      .join("|");
-  const choose = (n: number) => () => {
-    const now = items()[n];
-    if (now && now !== "divider") runMenu(now.does);
-  };
-  return ForEach({ items: () => [{ id: shape() }], key: (x) => x.id }, () =>
-    row().contextMenu(items().map((i, n) => (i === "divider" ? Divider() : Button(i.label, choose(n))))),
-  );
+  const shown = () => tidyMenu(items());
+  return ForEach({ items: () => [{ id: menuKey(shown()) }], key: (x) => x.id }, () => {
+    const now = shown();
+    if (now.length === 0) return row();
+    return row().contextMenu(
+      now.map((i) => (i === "divider" ? Divider() : Button(i.label, () => chooseMenuItem(shown(), i.label)))),
+    );
+  });
 }
 
 /** A PR's state chip, "draft": its words on a faint face of its tone's hue,
