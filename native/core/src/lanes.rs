@@ -129,7 +129,7 @@ const LANE_COLORS: [Token; 8] = [
 ];
 
 /// What an unknown colour's error suggests. A hex is refused, so every
-/// lane reads in both themes; the same words as lane-config.ts.
+/// lane reads in both themes.
 const LANE_COLOR_HINT: &str = "use a lane token (laneMain, laneReview, laneBackground, laneParked, laneUnsorted, laneViolet, laneTeal or laneRose); a hex is not taken";
 
 fn parse_color(s: &str) -> Option<Token> {

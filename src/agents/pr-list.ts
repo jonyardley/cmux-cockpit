@@ -2,7 +2,6 @@
 // Pure reads of `data`, so each is testable alone.
 
 import { mostActive } from "../shared/activity.ts";
-import { placeholderIds } from "../shared/anchors.ts";
 import { copyableBranch, copyableLink } from "../shared/copyable.ts";
 import type { Last } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
@@ -97,6 +96,24 @@ function prTitle(w: Workspace, pr: PullRequest): string {
   return (/^pr$/i.test(label) ? "" : label) || pr.branch || displayTitle(w) || "";
 }
 
+// The lane names the build bakes in from config/lanes.json
+// (scripts/lanes-config.ts).
+declare const __LANES__: readonly string[] | undefined;
+
+/** Today's four lanes' names, for a bundle built without the define. */
+export const BUILT_IN_LANE_NAMES: readonly string[] = ["Main activity", "For review", "Background", "Parked"];
+
+const laneKey = (s: string | undefined): string => (s ?? "").trim().toLowerCase();
+
+const LANE_KEYS: ReadonlySet<string> = new Set(
+  (typeof __LANES__ === "undefined" ? BUILT_IN_LANE_NAMES : __LANES__).map(laneKey),
+);
+
+// No group flag in renderer data (issue #7), so the title decides; see native/core/src/anchors.rs
+export function isLanePlaceholder(w: Workspace): boolean {
+  return LANE_KEYS.has(laneKey(w.title));
+}
+
 // Every PR, open first then merged then closed. Within each state the PRs
 // workspaces hold come before Jon's own that no workspace holds, newest first
 // in each, so a merged or closed workspace PR can never push his open PRs out
@@ -105,10 +122,9 @@ function prTitle(w: Workspace, pr: PullRequest): string {
 const allPrs = computed((): PrEntry[] => {
   const seen = new Set<string>();
   const all = data.workspaces() ?? [];
-  // A lane's placeholder is no chat (shared/anchors.ts): a PR cmux pins on it
-  // is dropped, and an own PR its agent opened names no session.
-  const placeholders = placeholderIds(data.groups() ?? [], new Map(all.map((w) => [w.id, w])));
-  const workspaces = all.filter((w) => !placeholders.has(w.id));
+  // A lane's placeholder is no chat: a PR cmux pins on it is dropped, and an
+  // own PR its agent opened names no session.
+  const workspaces = all.filter((w) => !isLanePlaceholder(w));
   const held = workspacePrs(workspaces, seen);
   const own = ownPrs(new Map(workspaces.map((w) => [w.id, w])), seen);
   const isOwn = new Set(own.map((e) => e.key));

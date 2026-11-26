@@ -635,13 +635,12 @@ function whileOpen(k: "prs" | "made", body: () => void): void {
   }
 }
 
-describe("group placeholders", () => {
-  it("leaves out a PR cmux pins on a group's placeholder workspace", () => {
+describe("lane placeholders, by title alone", () => {
+  it("leaves out a PR cmux pins on a workspace titled after a lane", () => {
     r.data.workspaces = [
       ws("anchor", { title: "For review", pr: { url: "u/old", number: 2163, status: "merged" } }),
       ws("real", { title: "Some chat", pr: { url: "u/new", number: 7, status: "open" } }),
     ];
-    r.data.groups = [{ id: "g", name: "For review", anchorId: "anchor" }];
     assert.deepEqual(
       m.prs().map((e) => e.pr.number),
       [7],
@@ -649,7 +648,7 @@ describe("group placeholders", () => {
     assert.equal(m.prCount(), 1);
   });
 
-  it("leaves it out with no group list, by its lane title alone, even with an agent asking", () => {
+  it("leaves it out by its lane title, even with an agent asking", () => {
     r.data.workspaces = [
       ws("anchor", {
         title: "For review",
@@ -660,24 +659,21 @@ describe("group placeholders", () => {
     assert.equal(m.prCount(), 0);
   });
 
-  it("keeps a lane-titled chat's PR while the group list says it is not the anchor", () => {
+  it("drops a real chat whose title is a lane name, the known wrong case pr-list.ts names", () => {
     r.data.workspaces = [
       ws("anchor", { title: "Background" }),
       ws("chat", { title: "Parked", pr: { url: "u/1", number: 1, status: "open" } }),
     ];
-    r.data.groups = [{ id: "g", name: "Background", anchorId: "anchor" }];
-    assert.equal(m.prCount(), 1);
+    assert.equal(m.prCount(), 0);
   });
 
-  it("keeps the PR of a real workspace a group is anchored on", () => {
+  it("keeps the PR of a workspace whose title is no lane name", () => {
     r.data.workspaces = [ws("real", { title: "Some chat", pr: { url: "u/1", number: 1, status: "open" } })];
-    r.data.groups = [{ id: "g", name: "For review", anchorId: "real" }];
     assert.equal(m.prCount(), 1);
   });
 
-  it("keeps the PR of a group Jon made himself, titled after it", () => {
+  it("keeps the PR of a group Jon made himself, its title no lane name", () => {
     r.data.workspaces = [ws("mine", { title: "my group", pr: { url: "u/1", number: 1, status: "open" } })];
-    r.data.groups = [{ id: "g", name: "my group", anchorId: "mine" }];
     assert.equal(m.prCount(), 1);
   });
 });

@@ -238,6 +238,7 @@ interface WorkspaceGroup {
 
 declare const data: {
   workspaces(): Workspace[] | null | undefined;
+  // cmux sends the agents panel no group list (PR #154), so pr-list.ts matches lane titles
   groups(): WorkspaceGroup[] | null | undefined;
   clock(): { epoch: number } | null | undefined;
   selectedId(): string | null | undefined;
