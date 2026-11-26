@@ -1,6 +1,6 @@
 // The agents panel's two tabs (#397): Now, today's panel, and Details, the
 // selected workspace's whole story from data the panel already reads. Which
-// tab shows is panel state, remembered per workspace until reload; the rest
+// tab shows is panel state, remembered per workspace and saved; the rest
 // are pure reads of `data` and the saved state, so each is testable alone.
 
 import type { SavedCheck, SavedWait } from "../../scripts/state-config.ts";
@@ -8,6 +8,7 @@ import type { Last } from "../shared/list.ts";
 import { markLast } from "../shared/list.ts";
 import { asksNothing, waitingMove } from "../shared/move.ts";
 import { askReason } from "../shared/needs.ts";
+import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import { checksOf, diffText, prOf } from "../shared/prs.ts";
 import { ageSince } from "../shared/time.ts";
 import { waitDetail } from "../shared/waits.ts";
@@ -24,9 +25,10 @@ import { STATUS_DOT, T } from "./theme.ts";
 
 export type Tab = "now" | "details";
 
-// wsId -> the tab chosen there; a workspace not in it shows Now. Not saved:
-// a reload lands every workspace back on Now.
-const [chosen, setChosen] = signal<ReadonlyMap<string, Tab>>(new Map());
+// wsId -> the tab chosen there; a workspace not in it shows Now.
+const savedTabs = (): Map<string, Tab> =>
+  new Map(Object.entries(SAVED_STATE.ui?.tab ?? {}).filter(([, t]) => t === "details"));
+const [chosen, setChosen] = signal<ReadonlyMap<string, Tab>>(savedTabs());
 
 /** The tab the selected workspace shows: the one last chosen there, else
  * Now. Always Now with none selected. */
@@ -41,10 +43,12 @@ export function chooseTab(t: Tab): void {
   const c = current();
   if (!c) return;
   const id = c.ws.id;
+  if ((chosen().get(id) ?? "now") === t) return;
   const next = new Map(chosen());
   if (t === "now") next.delete(id);
   else next.set(id, t);
   setChosen(next);
+  persistSet(`ui.tab.${id}`, t === "now" ? null : t);
 }
 
 // ---- Durations -------------------------------------------------------------------

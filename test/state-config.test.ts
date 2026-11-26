@@ -456,6 +456,34 @@ test("applySet refuses a bad ui key or value", () => {
   }
 });
 
+test("applySet sets, refuses and deletes one workspace's tab under ui.tab.<wsId>, with no rebuild", () => {
+  const start = { ...emptyState(), ui: { mode: "all" as const, tab: { w2: "details" as const } } };
+  const set = applySet(start, "ui.tab.w1", '"details"');
+  assert.ok(set.ok);
+  if (set.ok) {
+    assert.deepEqual(set.state.ui, { mode: "all", tab: { w2: "details", w1: "details" } });
+    assert.deepEqual(validateState(JSON.parse(JSON.stringify(set.state))).ui.tab, { w2: "details", w1: "details" });
+    const one = applySet(set.state, "ui.tab.w2", null);
+    assert.ok(one.ok);
+    if (one.ok) {
+      assert.deepEqual(one.state.ui, { mode: "all", tab: { w1: "details" } });
+      const none = applySet(one.state, "ui.tab.w1", null);
+      assert.ok(none.ok && none.state.ui.mode === "all" && !("tab" in none.state.ui));
+    }
+  }
+  for (const value of ['"now"', '{"w1":"details"}', "1"]) {
+    assert.deepEqual(applySet(emptyState(), "ui.tab.w1", value), { ok: false, error: 'ui.tab.<wsId> wants "details"' });
+  }
+  for (const key of ["ui.tab", "ui.tab.", "ui.tab.__proto__", `ui.tab.${"w".repeat(129)}`]) {
+    assert.equal(applySet(emptyState(), key, '"details"').ok, false, key);
+  }
+  const many = Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`w${i}`, "details"]));
+  const capped = validateState({ ui: { tab: { ...many, bad: 1 } } }).ui.tab ?? {};
+  assert.equal(Object.keys(capped).length, 256);
+  assert.equal(capped.w299, "details");
+  assert.equal(rebuildsOn("ui.tab.w1"), false);
+});
+
 test("validateState keeps a good ui and drops bad modes and flags", () => {
   assert.deepEqual(validateState({ ui: { mode: "all", collapsed: { "lane:main": 1 } } }).ui, {
     mode: "all",

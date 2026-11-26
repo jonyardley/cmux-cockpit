@@ -29,6 +29,8 @@ describe("each sidebar's saved state", () => {
       const read = new Set([...text.matchAll(/SAVED_STATE\d*\.(\w+)/g)].map((m) => m[1]));
       assert.ok(read.size > 0, "the bundle reads saved state by name");
       for (const k of UNREAD[entry]) assert.ok(!read.has(k), `${entry} reads ${k}, which UNREAD leaves out`);
+      const ui = new Set([...text.matchAll(/SAVED_STATE\d*\.ui\??\.(\w+)/g)].map((m) => m[1]));
+      for (const k of ui) assert.equal(k, "tab", `${entry} reads ui.${k}, which stateFor leaves out`);
     });
 
     it(`reads ${entry}'s saved state only by name, so the scan sees every read`, async () => {
@@ -45,6 +47,13 @@ describe("each sidebar's saved state", () => {
     const agents = stateFor("agents", state);
     assert.ok(!("ui" in agents) && !("projects" in agents));
     assert.ok("prs" in agents && "poll" in stateFor("agents", { ...state, poll: { okEpoch: 1 } }));
+  });
+
+  it("gives the agents panel only ui.tab, so the native sidebar's view and folds never reload it", () => {
+    const ui = { mode: "projects" as const, collapsed: { "lane:main": 1 }, filter: "other" };
+    assert.ok(!("ui" in stateFor("agents", { ...emptyState(), ui })));
+    const tab = { w1: "details" as const };
+    assert.deepEqual(stateFor("agents", { ...emptyState(), ui: { ...ui, tab } }).ui, { tab });
   });
 
   it("gives the agents panel the background tasks without their seenEpoch stamps", () => {
