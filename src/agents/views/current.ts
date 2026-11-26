@@ -145,8 +145,8 @@ function helpersBlock(): View {
   );
 }
 
-// Types a fix prompt into the agent: only on a failed check, and only while
-// the agent can take typing (checks.ts fixTarget). One clay face, no ring:
+// Sends the agent a fix prompt: only on a failed check with a live agent
+// (checks.ts fixTarget). One clay face, no ring:
 // a ring's rim would show round the hover colour.
 function fixButton(e: () => CheckRow): View {
   return Text("Fix")

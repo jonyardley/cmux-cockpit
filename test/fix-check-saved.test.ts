@@ -1,9 +1,7 @@
-// Fix on a failed check: it types a prompt into the agent's terminal and
-// presses Enter, so it shows only while that agent can take typing, never
-// while it works or asks, since the words would answer a permission prompt.
-// Idle is always a turn end; needs_input is an ask unless this session's
-// saved turn end explains it. __STATE__ is set before the renderer import,
-// as in asking-saved.test.ts.
+// Fix on a failed check: it sends the agent a cmux agent message, which
+// waits while the agent works or a prompt is open and is never typed, so it
+// shows for any live agent. __STATE__ is set before the renderer import, as
+// in asking-saved.test.ts.
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
@@ -25,12 +23,11 @@ const pr = (n: number, status = "open") => ({
   dismissed: {},
   projectOverride: {},
   projects: {},
-  prs: { sel: pr(7), asked: pr(8), turn: pr(9), merged: pr(10, "merged") },
+  prs: { sel: pr(7), asked: pr(8), merged: pr(10, "merged") },
   ownPrs: {},
   subagents: {},
   published: {},
   asking: { asked: { reason: "allow git push?", epoch: 1000 } },
-  moves: { turn: { text: "go", epoch: 1000, session: "s-turn" } },
   poll: { okEpoch: 1000 },
   ui: {},
 };
@@ -39,7 +36,6 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const m = { ...(await import("../src/agents/model.ts")), ...(await import("../src/agents/checks.ts")) };
-const { dismissNeeds } = await import("../src/shared/needs.ts");
 
 beforeEach(() => {
   r.data.epoch = 1100;
@@ -50,11 +46,6 @@ beforeEach(() => {
 const select = (id: string, a: Agent, extra: Partial<Workspace> = {}) => {
   r.data.workspaces = [ws(id, { selected: true, agents: [a], ...extra })];
 };
-
-// The agent that saved the "turn" workspace's move, on its turn: the nudge
-// moved it to needs_input `after` seconds past the saved turn end.
-const onTurn = (after: number) =>
-  agent("needs_input", { id: "s-turn", kind: "claude", surfaceId: "s1", sinceEpoch: 1000 + after });
 
 const fixable = () =>
   m
@@ -78,44 +69,25 @@ describe("when Fix shows", () => {
     assert.deepEqual(fixable(), ["lint"]);
   });
 
-  it("shows on a turn its saved turn end explains", () => {
-    select("turn", onTurn(60), { latestAt: 990 });
+  it("shows while the agent works: the message waits for its next step", () => {
+    select("sel", agent("working", { surfaceId: "s1", sinceEpoch: 900 }));
     assert.deepEqual(fixable(), ["lint"]);
   });
 
-  it("hides on needs_input with no saved turn end: an ask not yet saved reads the same", () => {
+  it("shows while the agent asks: the message waits for the prompt to close", () => {
+    select("asked", agent("needs_input", { surfaceId: "s1", sinceEpoch: 990 }));
+    assert.deepEqual(fixable(), ["lint"]);
     select("sel", agent("needs_input", { surfaceId: "s1", sinceEpoch: 1050 }));
-    assert.deepEqual(fixable(), []);
+    assert.deepEqual(fixable(), ["lint"]);
   });
 
-  it("hides when the needs_input began too long after the turn end to be its nudge", () => {
-    select("turn", onTurn(121), { latestAt: 990 });
-    assert.deepEqual(fixable(), []);
-  });
-
-  it("hides when a prompt since the turn end has retired it", () => {
-    select("turn", onTurn(60), { latestAt: 1030 });
-    assert.deepEqual(fixable(), []);
-  });
-
-  it("hides while the agent works, has ended, or has no terminal", () => {
-    select("sel", agent("working", { surfaceId: "s1", sinceEpoch: 900 }));
-    assert.deepEqual(fixable(), []);
-    select("sel", agent("ended", { surfaceId: "s1", sinceEpoch: 900 }));
-    assert.deepEqual(fixable(), []);
+  it("shows with no terminal surface: the message goes to the workspace", () => {
     select("sel", agent("idle", { sinceEpoch: 900 }));
-    assert.deepEqual(fixable(), []);
+    assert.deepEqual(fixable(), ["lint"]);
   });
 
-  it("hides while the agent asks", () => {
-    select("asked", agent("needs_input", { surfaceId: "s1", sinceEpoch: 990 }));
-    assert.deepEqual(fixable(), []);
-  });
-
-  it("stays hidden after the ask is dismissed: the prompt is still on screen", () => {
-    select("asked", agent("needs_input", { surfaceId: "s1", sinceEpoch: 990 }));
-    dismissNeeds(r.data.workspaces?.[0]);
-    assert.notEqual(m.cur().a?.status, "needs_input", "the panel shows the dismissed ask as not asking");
+  it("hides once the agent has ended", () => {
+    select("sel", agent("ended", { surfaceId: "s1", sinceEpoch: 900 }));
     assert.deepEqual(fixable(), []);
   });
 
@@ -136,17 +108,18 @@ describe("when Fix shows", () => {
 });
 
 describe("sendFix", () => {
-  it("types the prompt into the agent's terminal, then presses Enter", () => {
-    select("sel", agent("idle", { surfaceId: "s1", sinceEpoch: 900 }));
-    m.sendFix("lint");
-    assert.deepEqual(r.calls, [
-      {
-        method: "surface.send_text",
-        params: { workspace_id: "sel", surface_id: "s1", text: m.fixPrompt("lint", 7) },
-      },
-      { method: "surface.send_key", params: { workspace_id: "sel", surface_id: "s1", key: "enter" } },
-    ]);
+  const sent = (target: string, pr: number) => ({
+    method: "agent.message.send",
+    params: { target, body: m.fixPrompt("lint", pr), from: "cockpit" },
   });
+
+  for (const status of ["idle", "working", "needs_input"] as const) {
+    it(`sends one agent message to the workspace, typing nothing, while ${status}`, () => {
+      select("sel", agent(status, { surfaceId: "s1", sinceEpoch: 1050 }));
+      m.sendFix("lint");
+      assert.deepEqual(r.calls, [sent("sel", 7)]);
+    });
+  }
 
   it("hides Fix until the agent's status changes, so a second tap sends nothing", () => {
     const a = agent("idle", { surfaceId: "s1", sinceEpoch: 900 });
@@ -154,20 +127,18 @@ describe("sendFix", () => {
     m.sendFix("lint");
     assert.deepEqual(fixable(), []);
     m.sendFix("lint");
-    assert.equal(r.calls.length, 2);
-    // A paste stamps lastActivityAt before the agent starts working: still held.
+    assert.equal(r.calls.length, 1);
+    // Activity alone does not end the hold before the agent starts working.
     select("sel", { ...a, lastActivityAt: 1101 });
     assert.deepEqual(fixable(), []);
-    // The agent works, then finishes: a new spell brings Fix back.
+    // The agent wakes to the message: a new spell brings Fix back.
     select("sel", { ...a, status: "working", sinceEpoch: 1102 });
-    assert.deepEqual(fixable(), []);
-    select("sel", { ...a, status: "idle", sinceEpoch: 1150 });
     assert.deepEqual(fixable(), ["lint"]);
   });
 
-  it("brings Fix back after the hold lapses when the agent never started", () => {
-    // No start time, so the spell cannot change: only the hold's clock ends it.
-    select("sel", agent("idle", { surfaceId: "s1" }));
+  it("brings Fix back after the 90 second hold when the spell never changes", () => {
+    // A busy agent stays working with the same start time: only the clock ends it.
+    select("sel", agent("working", { surfaceId: "s1", sinceEpoch: 900 }));
     m.sendFix("lint");
     assert.deepEqual(fixable(), []);
     r.data.epoch = 1100 + 89;
@@ -176,8 +147,8 @@ describe("sendFix", () => {
     assert.deepEqual(fixable(), ["lint"]);
   });
 
-  it("sends nothing while the agent works", () => {
-    select("sel", agent("working", { surfaceId: "s1", sinceEpoch: 900 }));
+  it("sends nothing once the agent has ended", () => {
+    select("sel", agent("ended", { surfaceId: "s1", sinceEpoch: 900 }));
     m.sendFix("lint");
     assert.deepEqual(r.calls, []);
   });

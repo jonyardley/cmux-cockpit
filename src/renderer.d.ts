@@ -119,17 +119,10 @@ declare function computed<T>(fn: () => T): () => T;
  * does not exist yet (#87).
  */
 declare function sidebar(root: () => View, options?: { surface?: "glass" }): void;
-/** Types text into a terminal surface as if pasted; it does not press Enter. */
-declare function cmux(
-  method: "surface.send_text",
-  params: { workspace_id: string; surface_id: string; text: string },
-): void;
-/** Presses one key in a terminal surface. Only "enter" is used; add a name
- * from `cmux send-key` here before sending it, so a typo fails the build. */
-declare function cmux(
-  method: "surface.send_key",
-  params: { workspace_id: string; surface_id: string; key: "enter" },
-): void;
+/** Sends a message to the agent in `target` (a workspace resolves to its
+ * agent's surface). It waits while a prompt is open and is never typed, so it
+ * cannot answer one. `body` is at most 32 KiB, `from` one line of 64 chars. */
+declare function cmux(method: "agent.message.send", params: { target: string; body: string; from?: string }): void;
 /** Closes a whole workspace, its terminals and agents with it, as
  * `cmux close-workspace` does. The worktree on disk is left alone. */
 declare function cmux(method: "workspace.close", params: { workspace_id: string }): void;
