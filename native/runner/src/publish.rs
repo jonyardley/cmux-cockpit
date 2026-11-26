@@ -145,11 +145,20 @@ pub fn ready(feed: &Feed, started: Instant) -> bool {
 pub fn write_atomic(dir: &Path, name: &str, bytes: &[u8]) -> io::Result<()> {
     // Named by `tmp_prefix`, so a crash's is swept.
     let tmp = dir.join(format!("{}{}.tmp", tmp_prefix(name), std::process::id()));
-    let written = fs::write(&tmp, bytes).and_then(|()| fs::rename(&tmp, dir.join(name)));
-    if written.is_err() {
-        let _ = fs::remove_file(&tmp);
+    fs::write(&tmp, bytes)
+        .and_then(|()| fs::rename(&tmp, dir.join(name)))
+        .map_err(|e| with_removal(e, &tmp, fs::remove_file(&tmp)))
+}
+
+/// A failed write's error, naming its temp file too when that could not
+/// be removed. NotFound means the write never made it.
+fn with_removal(e: io::Error, tmp: &Path, removed: io::Result<()>) -> io::Error {
+    match removed {
+        Err(r) if r.kind() != ErrorKind::NotFound => {
+            io::Error::new(e.kind(), format!("{e}; {} not removed: {r}", tmp.display()))
+        }
+        _ => e,
     }
-    written
 }
 
 /// Before the pid in `name`'s temp file, as `write_atomic` names it.
@@ -253,17 +262,25 @@ fn alive(pid: u32) -> bool {
 
 /// Deletes the files in `dir` whose names start with `prefix` and a pid
 /// no longer running: a claim or a temp file a crash left. A live
-/// publisher's own are left alone, so two can run at once.
-fn sweep(dir: &Path, prefix: &str, alive: &dyn Fn(u32) -> bool) {
+/// publisher's own are left alone, so two can run at once. Returns a
+/// log line for each that would not go.
+fn sweep(dir: &Path, prefix: &str, alive: &dyn Fn(u32) -> bool) -> Vec<String> {
     let Ok(entries) = fs::read_dir(dir) else {
-        return;
+        return Vec::new();
     };
+    let mut failed = Vec::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if pid_in(&name, prefix).is_some_and(|pid| !alive(pid)) {
-            let _ = fs::remove_file(entry.path());
+        if pid_in(&name, prefix).is_some_and(|pid| !alive(pid))
+            && let Err(e) = fs::remove_file(entry.path())
+        {
+            failed.push(format!(
+                "sweep: {} not removed: {e}",
+                entry.path().display()
+            ));
         }
     }
+    failed
 }
 
 /// Writes the core's inputs out and takes its effects in, in one shared
@@ -284,6 +301,8 @@ pub struct Publisher {
     tally: Tally,
     /// Posts the "changed" signal; true when it went.
     signal: Box<dyn FnMut() -> bool>,
+    /// Lines from before there was a log to write them to.
+    held: Vec<String>,
 }
 
 impl Publisher {
@@ -301,11 +320,11 @@ impl Publisher {
     ) -> io::Result<Publisher> {
         let outbox = root.join(OUTBOX_DIR);
         fs::create_dir_all(&outbox)?;
-        sweep(&outbox, TAKEN, alive);
+        let mut held = sweep(&outbox, TAKEN, alive);
         let answers = root.join(INBOX_DIR);
         fs::create_dir_all(&answers)?;
-        sweep(&answers, inbox::TMP, alive);
-        sweep(&root, &tmp_prefix(DATA_FILE), alive);
+        held.extend(sweep(&answers, inbox::TMP, alive));
+        held.extend(sweep(&root, &tmp_prefix(DATA_FILE), alive));
         let inbox = Inbox::new(answers);
         inbox.prune(epoch_ms().saturating_sub(stale_ms()));
         Ok(Publisher {
@@ -317,6 +336,7 @@ impl Publisher {
             data_seq: 0,
             tally: Tally::new(Instant::now()),
             signal,
+            held,
         })
     }
 
@@ -466,6 +486,9 @@ impl Publisher {
     /// failed). The signal follows the inputs and the answers. The tally
     /// is logged when it is due.
     pub fn step(&mut self, feed: &mut Feed, fresh: bool, log: &mut dyn FnMut(String)) {
+        for line in self.held.drain(..) {
+            log(line);
+        }
         self.take_effects(feed, log);
         let mut changed = self.write_answers(feed, log);
         if fresh || self.last_inputs.is_none() {
@@ -1071,6 +1094,35 @@ mod tests {
         assert!(p.outbox().join(".taken-8-b.json").exists());
         assert!(root.join(".data.json.8.tmp").exists());
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_leftover_that_will_not_go_is_logged_on_the_first_step() {
+        let root = temp_root("stuck-leftover");
+        fs::create_dir_all(root.join(OUTBOX_DIR).join(".taken-7-a.json")).unwrap();
+        let mut p = Publisher::new_with(root.clone(), Box::new(|| true), &|_| false).unwrap();
+        let mut lines = Vec::new();
+        p.step(&mut Feed::default(), false, &mut |l| lines.push(l));
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with("sweep: ") && l.contains(".taken-7-a.json"))
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_temp_file_left_after_a_failed_write_is_named() {
+        let tmp = Path::new("/x/.data.json.1.tmp");
+        let e = || io::Error::other("full");
+        let stuck = with_removal(e(), tmp, Err(io::Error::other("busy")));
+        assert_eq!(
+            stuck.to_string(),
+            "full; /x/.data.json.1.tmp not removed: busy"
+        );
+        let gone = io::Error::from(ErrorKind::NotFound);
+        assert_eq!(with_removal(e(), tmp, Err(gone)).to_string(), "full");
+        assert_eq!(with_removal(e(), tmp, Ok(())).to_string(), "full");
     }
 
     #[test]
