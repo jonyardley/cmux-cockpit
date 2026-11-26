@@ -6,12 +6,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { build } from "esbuild";
 import { type Baked, bundleOptions, ENTRIES, stateFor, UNREAD } from "../scripts/bundle.ts";
+import { BUILT_IN_LANE_NAMES } from "../scripts/lanes-config.ts";
 import { emptyState } from "../scripts/state-config.ts";
-import { BUILT_IN_LANES } from "../src/shared/lane-config.ts";
 
 const baked: Baked = {
   projects: [],
-  lanes: BUILT_IN_LANES,
+  lanes: BUILT_IN_LANE_NAMES,
   state: emptyState(),
   unreadable: false,
   urlToken: "",
@@ -76,8 +76,7 @@ describe("each sidebar's saved state", () => {
 
 describe("the lane table", () => {
   it("reaches the agents panel, whose placeholders follow the lane names", async () => {
-    const shelf = { ...BUILT_IN_LANES[3], name: "Shelf of ideas" };
-    const text = await bundleText("agents", { ...baked, lanes: [shelf] });
-    assert.ok(text.includes('"Shelf of ideas"'), "shared/anchors.ts reads the baked names");
+    const text = await bundleText("agents", { ...baked, lanes: ["Shelf of ideas"] });
+    assert.ok(text.includes('"Shelf of ideas"'), "agents/pr-list.ts reads the baked names");
   });
 });

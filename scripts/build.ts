@@ -6,11 +6,11 @@
 // A `root` field's leading `~` is expanded against HOME here, since a sidebar
 // has no filesystem access to do it at runtime.
 //
-// config/lanes.json (gitignored) is the lane table, checked by the native
-// core's rules (src/shared/lane-config.ts) and injected as __LANES__ with
-// every gap filled, so the agents panel knows the lane placeholders by name
-// (src/shared/anchors.ts). With no file it is today's four lanes; a file
-// that breaks a rule fails the build, as a bad project table does.
+// config/lanes.json (gitignored) is the lane table. Only its names are
+// checked here (lanes-config.ts) and injected as __LANES__, so the agents
+// panel knows the lane placeholders by title (src/agents/pr-list.ts). With
+// no file it is today's four names; a file with a bad name list fails the
+// build, as a bad project table does. The Cockpit checks the other fields.
 //
 // config/state.json (gitignored, written by the URL handler) is read the
 // same way and injected as __STATE__, so a sidebar starts from whatever was
@@ -33,9 +33,9 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
 import { expandHome } from "../src/shared/home.ts";
-import { BUILT_IN_LANES, type LaneSpec, resolveLanes } from "../src/shared/lane-config.ts";
 import { bundleOptions, ENTRIES } from "./bundle.ts";
 import { changedKeys, takeTags } from "./hook-build.ts";
+import { BUILT_IN_LANE_NAMES, laneNames } from "./lanes-config.ts";
 import { isLiveCheckout } from "./live-checkout.ts";
 import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
 import { emptyState, isRecord, type State, validateState } from "./state-config.ts";
@@ -64,9 +64,9 @@ function loadProjects(): readonly Project[] {
   return result.projects;
 }
 
-function loadLanes(): readonly LaneSpec[] {
+function loadLanes(): readonly string[] {
   const path = "config/lanes.json";
-  if (!existsSync(path)) return BUILT_IN_LANES;
+  if (!existsSync(path)) return BUILT_IN_LANE_NAMES;
   console.log(`build: using ${path}`);
 
   let parsed: unknown;
@@ -76,12 +76,12 @@ function loadLanes(): readonly LaneSpec[] {
     console.error(`build: cannot read or parse ${path}: ${(err as Error).message}`);
     process.exit(1);
   }
-  const result = resolveLanes(parsed);
+  const result = laneNames(parsed);
   if (!result.ok) {
     console.error(`build: ${path}: ${result.error}`);
     process.exit(1);
   }
-  return result.lanes;
+  return result.names;
 }
 
 // Expands a leading "~" (bare, or "~/...") against HOME; other roots pass

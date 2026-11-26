@@ -660,13 +660,15 @@ describe("group placeholders", () => {
     assert.equal(m.prCount(), 0);
   });
 
-  it("keeps a lane-titled chat's PR while the group list says it is not the anchor", () => {
+  it("drops a chat titled after a lane even when a group list says another is the anchor", () => {
+    // The panel is sent no group list on screen, so the title alone decides:
+    // the known wrong case pr-list.ts names.
     r.data.workspaces = [
       ws("anchor", { title: "Background" }),
       ws("chat", { title: "Parked", pr: { url: "u/1", number: 1, status: "open" } }),
     ];
     r.data.groups = [{ id: "g", name: "Background", anchorId: "anchor" }];
-    assert.equal(m.prCount(), 1);
+    assert.equal(m.prCount(), 0);
   });
 
   it("keeps the PR of a real workspace a group is anchored on", () => {

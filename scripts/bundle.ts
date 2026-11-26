@@ -57,8 +57,8 @@ export function stateFor(entry: Entry, state: State): BakedState {
 /** What the build bakes into every sidebar, before stateFor trims the state. */
 export interface Baked {
   projects: unknown;
-  /** The lane table (src/shared/lane-config.ts), every gap filled. */
-  lanes: unknown;
+  /** The lane names from config/lanes.json (scripts/lanes-config.ts). */
+  lanes: readonly string[];
   state: State;
   unreadable: boolean;
   urlToken: string;

@@ -1,4 +1,4 @@
-//! Lane placeholders (src/shared/anchors.ts): the empty workspace cmux makes
+//! Lane placeholders: the empty workspace cmux makes
 //! to hold each lane's group. The cockpit draws one as its lane's header,
 //! never as a card. The renderer's data has no flag for it (issue #7), so a
 //! generated anchor is the one titled exactly after its group.
