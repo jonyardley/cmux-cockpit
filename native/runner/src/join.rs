@@ -27,6 +27,11 @@
 //! `program_status.changed` (issue #326). The join keeps the latest per
 //! surface and cockpit_core::program decides, for each session, whether
 //! its tab's report or its hooks say what the card shows.
+//!
+//! A Notification hook sets no status: the event redacts which one it
+//! was. cmux's `agent.notification.decision` on it does, by tab: a real
+//! ask puts the tab's newest live session in needs input, and Claude's
+//! idle reminder leaves it as it was.
 
 use std::collections::HashMap;
 
@@ -353,12 +358,16 @@ impl Join {
     /// cmux's verdict on a Notification (`status_from_decision`), naming
     /// the tab but no pid: a real ask puts the tab's newest live session in
     /// needs input. The Notification hook itself sets nothing, so either
-    /// may come first and the idle reminder never shows. Whether it
-    /// changed anything, and the status change.
+    /// may come first and the idle reminder never shows. A verdict older
+    /// than the session's last hook is late and sets nothing, so an ask
+    /// already answered never comes back. Whether it changed anything, and
+    /// the status change.
     fn verdict(&mut self, e: &Value, seq: u64) -> (bool, Option<Change>) {
         let p = &e["payload"];
         let kind = p["kind"].as_str().unwrap_or_default();
-        let Some(status) = status_from_decision(kind).filter(|_| p["agent"] == "claude") else {
+        let reason = p["reason"].as_str().unwrap_or_default();
+        let Some(status) = status_from_decision(kind, reason).filter(|_| p["agent"] == "claude")
+        else {
             return (false, None);
         };
         let Some(surface) = e["surface_id"].as_str() else {
@@ -378,6 +387,9 @@ impl Join {
             .as_str()
             .and_then(iso_epoch)
             .unwrap_or(prev.last_hook);
+        if at < prev.last_hook {
+            return (false, None);
+        }
         let next = Hooked::after(Some(prev), status, at, false, &prev.workspace);
         let moved = prev.status != next.status;
         let changed = *prev != next;
@@ -1954,6 +1966,27 @@ mod tests {
         let mut elsewhere = verdict(4, "agent.approval.requested", ERROR_AT + 1.0);
         elsewhere["surface_id"] = json!("OTHER");
         assert_eq!(j.event(&elsewhere), (false, None));
+        assert_eq!(status_at(&j, ERROR_AT + 2.0), Some(AgentStatus::Idle));
+    }
+
+    #[test]
+    fn a_verdict_older_than_the_last_hook_changes_nothing() {
+        let t = ERROR_AT;
+        let mut j = idle_from(t);
+        j.event(&tab_hook(4, "UserPromptSubmit", t + 10.0));
+        let late = verdict(5, "agent.approval.requested", t + 5.0);
+        assert_eq!(j.event(&late), (false, None));
+        assert_eq!(status_at(&j, t + 11.0), Some(AgentStatus::Working));
+        let since = agent_at(&j, t + 11.0).and_then(|a| a.since_epoch);
+        assert_eq!(since, Some(t + 10.0), "working since the prompt");
+    }
+
+    #[test]
+    fn an_ask_cmux_calls_stale_changes_nothing() {
+        let mut j = idle_from(ERROR_AT);
+        let mut stale = verdict(4, "agent.approval.requested", ERROR_AT + 1.0);
+        stale["payload"]["reason"] = json!("stale");
+        assert_eq!(j.event(&stale), (false, None));
         assert_eq!(status_at(&j, ERROR_AT + 2.0), Some(AgentStatus::Idle));
     }
 

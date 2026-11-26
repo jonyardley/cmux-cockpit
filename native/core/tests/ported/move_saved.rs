@@ -135,7 +135,7 @@ mod move_of {
         assert_eq!(
             s.agent_of(Some(&w)).and_then(|a| a.status),
             Some(NeedsInput),
-            "a move that asks Jon something is his turn from the Stop, not the nudge"
+            "a move that asks Jon something is his turn from the Stop"
         );
         let want = "the work is finished. Run /clear now.";
         assert_eq!(text_of(s.move_of(Some(&w))).as_deref(), Some(want));
@@ -159,7 +159,7 @@ mod move_of {
     }
 
     #[test]
-    fn still_shows_after_the_nudge_restamps_the_spell_and_the_activity_a_minute_on() {
+    fn still_shows_when_a_later_ask_restamps_the_spell_and_the_activity_a_minute_on() {
         let (mut s, _, mut fx) = setup();
         let w = at("quick", vec![waiting(&mut fx, "quick", 1060.0)]);
         assert_eq!(
@@ -179,8 +179,8 @@ mod move_of {
         assert_eq!(s.move_of(Some(&new_turn)), None);
         let interrupted = at("quick", vec![stopped(&mut fx, "quick", 1150.0)]).latest_at(1100.0);
         assert_eq!(s.move_of(Some(&interrupted)), None);
-        let nudged = at("quick", vec![waiting(&mut fx, "quick", 1210.0)]).latest_at(1100.0);
-        assert_eq!(s.move_of(Some(&nudged)), None, "nudged after the interrupt");
+        let asked = at("quick", vec![waiting(&mut fx, "quick", 1210.0)]).latest_at(1100.0);
+        assert_eq!(s.move_of(Some(&asked)), None, "asked after the interrupt");
         let past = at("quick", vec![stopped(&mut fx, "quick", 1000.0)]).latest_at(1004.0);
         assert_eq!(s.move_of(Some(&past)), None, "past the slack");
     }
@@ -369,10 +369,9 @@ mod a_turn_that_ended_on_nothing_for_you {
         assert_eq!(a.as_ref().and_then(|a| a.status.clone()), Some(NeedsInput));
         assert_eq!(a.and_then(|a| a.since_epoch), Some(1060.0));
         let legacy = at("legacy", vec![waiting(&mut fx, "legacy", 1060.0)]);
-        assert_eq!(
-            s.agent_of(Some(&legacy)).and_then(|a| a.status),
-            Some(NeedsInput)
-        );
+        let l = s.agent_of(Some(&legacy));
+        assert_eq!(l.as_ref().and_then(|a| a.status.clone()), Some(NeedsInput));
+        assert_eq!(l.and_then(|a| a.since_epoch), Some(1060.0));
     }
 
     #[test]

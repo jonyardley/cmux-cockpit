@@ -1057,7 +1057,9 @@ v0.65.2 where given; the rest were seen on 0.64.25 and are marked so.
   redacts which Notification it was, so a Notification sets nothing by
   itself; the runner takes cmux's `agent.notification.decision` for the
   same tab instead, and only `agent.approval.requested` sets needs input
-  (issue #438).
+  (issue #438). It sets nothing when its `reason` is `stale`,
+  `session-superseded` or `session-unbound` (the ask no longer waits in
+  that tab), or when it is older than the session's last hook.
 - `latestMessage`, `latestPrompt` and `latestAt` belong to the workspace
   (`latestConversationMessage`, `latestSubmittedMessage` and
   `latestSubmittedAt` in `Workspace.swift:3205-3207`). UserPromptSubmit

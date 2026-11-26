@@ -44,9 +44,20 @@ pub fn status_without_hooks(busy: Option<bool>) -> Option<AgentStatus> {
 /// The status cmux's `agent.notification.decision` of `kind` sets: needs
 /// input for a real ask, nothing for Claude's idle reminder
 /// (`agent.idle.observed`), which keeps the state as it was, as cmux does.
-pub fn status_from_decision(kind: &str) -> Option<AgentStatus> {
-    (kind == "agent.approval.requested").then_some(AgentStatus::NeedsInput)
+/// An ask whose `reason` says it no longer waits in its tab sets nothing.
+pub fn status_from_decision(kind: &str, reason: &str) -> Option<AgentStatus> {
+    (kind == "agent.approval.requested" && !STALE_REASONS.contains(&reason))
+        .then_some(AgentStatus::NeedsInput)
 }
+
+/// cmux 0.65.2's decision reasons for an ask that no longer waits in its
+/// tab: `stale` (a newer event governs the session: the request was
+/// resolved, the turn is older, or the session was replaced or ended),
+/// `session-superseded` (another session owns the tab) and
+/// `session-unbound` (no live process for the session). Source:
+/// `AgentNotificationDecision.swift` and
+/// `AgentJournalLifecycleCenter+Notifications.swift` in manaflow-ai/cmux.
+const STALE_REASONS: [&str; 3] = ["stale", "session-superseded", "session-unbound"];
 
 /// How long a working status may sit with no hook while Agent View says
 /// the session is idle, before Agent View wins. An Esc mid-turn sends no
@@ -225,12 +236,32 @@ mod tests {
 
     #[test]
     fn only_cmuxs_ask_verdict_needs_input_and_the_idle_reminder_sets_nothing() {
+        for reason in ["accepted", "deduplicated", "preference-filtered", "delayed"] {
+            assert_eq!(
+                status_from_decision("agent.approval.requested", reason),
+                Some(AgentStatus::NeedsInput),
+                "{reason}"
+            );
+        }
         assert_eq!(
-            status_from_decision("agent.approval.requested"),
-            Some(AgentStatus::NeedsInput)
+            status_from_decision("agent.idle.observed", "accepted"),
+            None
         );
-        assert_eq!(status_from_decision("agent.idle.observed"), None);
-        assert_eq!(status_from_decision("agent.turn.completed"), None);
+        assert_eq!(
+            status_from_decision("agent.turn.completed", "accepted"),
+            None
+        );
+    }
+
+    #[test]
+    fn an_ask_that_no_longer_waits_in_its_tab_sets_nothing() {
+        for reason in ["stale", "session-superseded", "session-unbound"] {
+            assert_eq!(
+                status_from_decision("agent.approval.requested", reason),
+                None,
+                "{reason}"
+            );
+        }
     }
 
     #[test]
