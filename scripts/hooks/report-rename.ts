@@ -14,8 +14,9 @@
 // every run. A name that matches a cmux group's name
 // is skipped: the cockpit takes a workspace titled after its group for the
 // group's generated placeholder (is_generated_anchor in native/core/src/anchors.rs)
-// and would hide it. It never fails the hook: every problem is a note on
-// stderr and exit 0.
+// and would hide it. A transcript that a move into a worktree carried to
+// another project folder is found there by its session id. It never fails
+// the hook: every problem is a note on stderr and exit 0.
 //
 // Two prompts rename the workspace at once, on UserPromptSubmit. `/ws
 // <name>` renames it and is blocked, so it never reaches the model and
@@ -33,8 +34,20 @@
 // goes into config/state.json's `names` map under the session id, which is
 // the agent's id in cmux, and the build bakes it in (src/agents/team.ts).
 
-import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { readable } from "../../src/shared/text.ts";
 import { scheduleBuild } from "../hook-build.ts";
 import { cleanLabel, type SavedName } from "../state-config.ts";
@@ -315,6 +328,39 @@ function readAt(fd: number, position: number, length: number): Buffer {
   return buf.subarray(0, length ? readSync(fd, buf, 0, length, position) : 0);
 }
 
+// Moving into or out of a worktree puts the transcript in another project folder; the session id is unique.
+export function transcriptFor(given: string, session: string): string {
+  if (existsSync(given)) return given;
+  const home = dirname(given);
+  const projects = dirname(home);
+  if (basename(projects) !== "projects") return given;
+  let folders: string[];
+  try {
+    folders = readdirSync(projects);
+  } catch {
+    return given;
+  }
+  let best = given;
+  let newest = -1;
+  for (const folder of folders) {
+    const candidate = join(projects, folder, `${session}.jsonl`);
+    const time = modified(candidate);
+    if (time > newest) {
+      newest = time;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+function modified(path: string): number {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return -1;
+  }
+}
+
 // The stamp moved on past what was added to the transcript since, or null
 // when the transcript cannot be read (a new session's is not written yet).
 function scan(transcript: string, stamp: Stamp): Stamp | null {
@@ -526,7 +572,7 @@ function apply(event: unknown, wsId: string | undefined): string[] {
   const before = parseStamp(readText(path));
   // A new session's transcript may not be written yet: its first prompt
   // can still come from the event.
-  const stamp = scan(transcript, before) ?? { ...before };
+  const stamp = scan(transcriptFor(transcript, session), before) ?? { ...before };
   stamp.issue ??= firstIssue(event, stamp);
   stamp.prompt ??= promptFromEvent(event);
   const notes = [renameWorkspace(wsId, stamp), prefixIssue(wsId, stamp), saveName(session, stamp)].filter(
