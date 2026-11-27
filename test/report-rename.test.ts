@@ -395,12 +395,19 @@ describe("transcriptFor", () => {
     assert.equal(transcriptFor(join(start, "twice.jsonl"), "twice"), newer);
   });
 
-  it("skips a folder not named after the given one", () => {
-    const unrelated = join(projects, "-Users-jon-Dev-Other");
-    mkdirSync(unrelated, { recursive: true });
-    writeFileSync(join(unrelated, "stray.jsonl"), "");
-    const given = join(start, "stray.jsonl");
-    assert.equal(transcriptFor(given, "stray"), given);
+  it("finds a transcript moved back to a shorter-named folder on leaving a worktree", () => {
+    const back = join(start, "left.jsonl");
+    writeFileSync(back, "");
+    assert.equal(transcriptFor(join(worktree, "left.jsonl"), "left"), back);
+  });
+
+  it("finds a transcript in a folder not sharing the given name's prefix", () => {
+    const sub = join(projects, "-Users-jon-Dev-App-web");
+    mkdirSync(sub, { recursive: true });
+    const given = join(sub, "sub.jsonl");
+    const moved = join(worktree, "sub.jsonl");
+    writeFileSync(moved, "");
+    assert.equal(transcriptFor(given, "sub"), moved);
   });
 
   it("returns the given path when it is not under a projects folder", () => {

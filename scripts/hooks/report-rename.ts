@@ -328,7 +328,7 @@ function readAt(fd: number, position: number, length: number): Buffer {
   return buf.subarray(0, length ? readSync(fd, buf, 0, length, position) : 0);
 }
 
-// Entering a worktree moves the transcript to a project folder named after the old one plus the worktree.
+// Moving into or out of a worktree puts the transcript in another project folder; the session id is unique.
 export function transcriptFor(given: string, session: string): string {
   if (existsSync(given)) return given;
   const home = dirname(given);
@@ -343,7 +343,6 @@ export function transcriptFor(given: string, session: string): string {
   let best = given;
   let newest = -1;
   for (const folder of folders) {
-    if (!folder.startsWith(basename(home))) continue;
     const candidate = join(projects, folder, `${session}.jsonl`);
     const time = modified(candidate);
     if (time > newest) {
