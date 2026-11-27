@@ -7,7 +7,7 @@
 // plumbing are not covered.
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
@@ -379,7 +379,39 @@ describe("transcriptFor", () => {
   });
 
   it("returns the given path when the projects folder is missing", () => {
-    const given = join(root, "missing", "folder", "lost.jsonl");
+    const given = join(root, "missing", "projects", "-Users-jon-Dev-App", "lost.jsonl");
     assert.equal(transcriptFor(given, "lost"), given);
+  });
+
+  it("picks the newest copy when several folders hold the transcript", () => {
+    const other = join(projects, "-Users-jon-Dev-App--claude-worktrees-other");
+    mkdirSync(other, { recursive: true });
+    const older = join(worktree, "twice.jsonl");
+    const newer = join(other, "twice.jsonl");
+    writeFileSync(older, "");
+    writeFileSync(newer, "");
+    utimesSync(older, new Date(1_000_000), new Date(1_000_000));
+    utimesSync(newer, new Date(2_000_000), new Date(2_000_000));
+    assert.equal(transcriptFor(join(start, "twice.jsonl"), "twice"), newer);
+  });
+
+  it("skips a folder not named after the given one", () => {
+    const unrelated = join(projects, "-Users-jon-Dev-Other");
+    mkdirSync(unrelated, { recursive: true });
+    writeFileSync(join(unrelated, "stray.jsonl"), "");
+    const given = join(start, "stray.jsonl");
+    assert.equal(transcriptFor(given, "stray"), given);
+  });
+
+  it("returns the given path when it is not under a projects folder", () => {
+    const elsewhere = join(root, "elsewhere");
+    const beside = join(elsewhere, "-Users-jon-Dev-App--claude-worktrees-fix");
+    mkdirSync(beside, { recursive: true });
+    writeFileSync(join(beside, "shallow.jsonl"), "");
+    assert.equal(
+      transcriptFor(join(elsewhere, "-Users-jon-Dev-App", "shallow.jsonl"), "shallow"),
+      join(elsewhere, "-Users-jon-Dev-App", "shallow.jsonl"),
+    );
+    assert.equal(transcriptFor("shallow.jsonl", "shallow"), "shallow.jsonl");
   });
 });

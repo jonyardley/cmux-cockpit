@@ -44,9 +44,10 @@ import {
   readFileSync,
   readSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { readable } from "../../src/shared/text.ts";
 import { scheduleBuild } from "../hook-build.ts";
 import { cleanLabel, type SavedName } from "../state-config.ts";
@@ -327,25 +328,38 @@ function readAt(fd: number, position: number, length: number): Buffer {
   return buf.subarray(0, length ? readSync(fd, buf, 0, length, position) : 0);
 }
 
-/**
- * The session's transcript: `given` when it is there, else the same file in
- * another folder beside it, since entering a worktree moves the transcript
- * to that worktree's project folder while the event still names the old one.
- */
+// Entering a worktree moves the transcript to a project folder named after the old one plus the worktree.
 export function transcriptFor(given: string, session: string): string {
   if (existsSync(given)) return given;
-  const projects = dirname(dirname(given));
+  const home = dirname(given);
+  const projects = dirname(home);
+  if (basename(projects) !== "projects") return given;
   let folders: string[];
   try {
     folders = readdirSync(projects);
   } catch {
     return given;
   }
+  let best = given;
+  let newest = -1;
   for (const folder of folders) {
+    if (!folder.startsWith(basename(home))) continue;
     const candidate = join(projects, folder, `${session}.jsonl`);
-    if (existsSync(candidate)) return candidate;
+    const time = modified(candidate);
+    if (time > newest) {
+      newest = time;
+      best = candidate;
+    }
   }
-  return given;
+  return best;
+}
+
+function modified(path: string): number {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return -1;
+  }
 }
 
 // The stamp moved on past what was added to the transcript since, or null
