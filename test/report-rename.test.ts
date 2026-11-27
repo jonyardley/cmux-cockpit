@@ -2,12 +2,15 @@
 // transcript, the group-name clash, reading cmux's group and workspace
 // lists, splitting a read into whole lines, loading the saved stamp,
 // naming the session for the agents panel, the issue a prompt names and
-// the name a `/ws` gives.
-// The cmux calls, the file reads and writes and the stdin/env plumbing are
-// not covered.
+// the name a `/ws` gives, and finding a transcript a worktree switch moved.
+// The cmux calls, the stamp and state reads and writes and the stdin/env
+// plumbing are not covered.
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, describe, it } from "node:test";
 import {
   clashesWithGroup,
   firstPrompt,
@@ -22,6 +25,7 @@ import {
   renamedTitle,
   sessionName,
   titleFrom,
+  transcriptFor,
   wholeLines,
   withIssue,
   withName,
@@ -345,5 +349,37 @@ describe("titleFrom", () => {
     assert.equal(titleFrom(list, "C-3"), null);
     assert.equal(titleFrom("not json", "A-1"), null);
     assert.equal(titleFrom("{}", "A-1"), null);
+  });
+});
+
+describe("transcriptFor", () => {
+  const root = mkdtempSync(join(tmpdir(), "report-rename-"));
+  after(() => rmSync(root, { recursive: true, force: true }));
+  const projects = join(root, "projects");
+  const start = join(projects, "-Users-jon-Dev-App");
+  const worktree = join(projects, "-Users-jon-Dev-App--claude-worktrees-fix");
+  mkdirSync(start, { recursive: true });
+  mkdirSync(worktree, { recursive: true });
+
+  it("returns a transcript that is where the event says", () => {
+    const given = join(start, "here.jsonl");
+    writeFileSync(given, "");
+    assert.equal(transcriptFor(given, "here"), given);
+  });
+
+  it("finds a transcript moved to the worktree's project folder", () => {
+    const moved = join(worktree, "moved.jsonl");
+    writeFileSync(moved, "");
+    assert.equal(transcriptFor(join(start, "moved.jsonl"), "moved"), moved);
+  });
+
+  it("returns the given path when the transcript is nowhere", () => {
+    const given = join(start, "gone.jsonl");
+    assert.equal(transcriptFor(given, "gone"), given);
+  });
+
+  it("returns the given path when the projects folder is missing", () => {
+    const given = join(root, "missing", "folder", "lost.jsonl");
+    assert.equal(transcriptFor(given, "lost"), given);
   });
 });
